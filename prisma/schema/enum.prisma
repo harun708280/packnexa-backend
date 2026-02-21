@@ -1,0 +1,74 @@
+enum UserRole {
+  ADMIN
+  USER
+  MERCHANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BusinessType {
+  E_COMMERCE
+  RETAILER
+  DISTRIBUTOR
+  IMPORTER
+  EXPORTER
+  MANUFACTURER
+}
+
+enum SubscriptionType {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+  MIXED_STOCK
+}
+
+enum VariantGeneration {
+  AUTO
+  MANUAL
+}
+
+enum PickStrategy {
+  FIFO
+  LIFO
+}
+
+enum InventoryType {
+  PURCHASE
+  SALE
+  RETURN
+  DAMAGE
+  ADJUSTMENT
+}

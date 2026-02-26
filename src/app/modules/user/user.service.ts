@@ -20,7 +20,7 @@ const createUser = async (Payload: CreateUserData) => {
       email,
       password: hashedPassword,
       contactNumber,
-      // role: Payload.role || UserRole.USER,
+
       status: UserStatus.ACTIVE,
     },
   });

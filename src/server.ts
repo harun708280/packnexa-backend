@@ -27,7 +27,7 @@ async function bootstrap() {
     server = app.listen(envVariables.PORT, () => {
       console.log(
         chalk.green("🚀 Server is running on http://localhost:") +
-          chalk.red.bold(envVariables.PORT)
+        chalk.red.bold(envVariables.PORT)
       );
     });
 

@@ -9,6 +9,7 @@ model MerchantDetails {
   documents       Documents?
   payments        Payments[]
   products        Product[]
+  orders          Order[]
 
   user User @relation(fields: [userId], references: [id])
 

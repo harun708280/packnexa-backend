@@ -141,22 +141,6 @@ const completeOnboarding = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// code by nur
-
-// const submitMerchantDetails = catchAsync(
-//   async (req: Request, res: Response) => {
-//     const userId = (req as any).user.userId;
-
-//     const result = await MerchantService.submitMerchantDetails(userId);
-
-//     sendResponse(res, {
-//       statusCode: 200,
-//       success: true,
-//       message: "Merchant profile submitted successfully",
-//       data: result,
-//     });
-//   },
-// );
 
 const getPayments = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;

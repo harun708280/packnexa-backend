@@ -5,6 +5,7 @@ import { inventoryRoutes } from "../modules/inventory/inventory.route";
 import { merchantRoutes } from "../modules/merchant/merchant.routes";
 import { productRoutes } from "../modules/product/product.route";
 import { userRoutes } from "../modules/user/user.routes";
+import { orderRoutes } from "../modules/order/order.route";
 
 const router = express.Router();
 
@@ -26,12 +27,16 @@ const moduleRoutes = [
     route: adminRoutes,
   },
   {
-    path: "/merchant/product",
+    path: "/product",
     route: productRoutes,
   },
   {
     path: "/inventory",
     route: inventoryRoutes,
+  },
+  {
+    path: "/order",
+    route: orderRoutes,
   },
 ];
 

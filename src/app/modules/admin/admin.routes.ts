@@ -6,7 +6,7 @@ import { AdminController } from "./admin.controller";
 
 export const router = express.Router();
 
-// router.use(authMiddleware, requireRole(UserRole.ADMIN));
+
 
 router.get("/applied-merchants", AdminController.getAppliedMerchant);
 

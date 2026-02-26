@@ -49,10 +49,13 @@ enum Gender {
 }
 
 enum ProductStatus {
+  PROCESSING
+  APPROVED
   ACTIVE
   INACTIVE
   OUT_OF_STOCK
   MIXED_STOCK
+  REJECTED
 }
 
 enum VariantGeneration {
@@ -71,4 +74,22 @@ enum InventoryType {
   RETURN
   DAMAGE
   ADJUSTMENT
+}
+
+enum OrderSource {
+  FACEBOOK
+  WHATSAPP
+  TIKTOK
+  INSTAGRAM
+  MANUAL
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  PACKED
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
 }

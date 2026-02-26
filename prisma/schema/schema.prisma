@@ -1,10 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
 }
 
 datasource db {
   provider = "postgresql"
-
-  // IGNORE THIS ERROR
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }

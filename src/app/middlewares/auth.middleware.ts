@@ -8,15 +8,20 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  const accessToken = req.cookies.accessToken;
+  let token = req.cookies.accessToken;
+  const authHeader = req.headers.authorization;
 
-  if (accessToken) {
+  if (!token && authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  }
+
+  if (token) {
     try {
-      const decoded = jwt.verify(accessToken, envVariables.JWT_ACCESS_SECRET!);
+      const decoded = jwt.verify(token, envVariables.JWT_ACCESS_SECRET!);
 
       (req as any).user = decoded;
       return next();
-    } catch {}
+    } catch { }
   }
 
   const refreshToken = req.cookies.refreshToken;

@@ -3,16 +3,17 @@ import { NextFunction, Request, Response } from "express";
 
 export const requireRole =
   (...roles: UserRole[]) =>
-  (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+    (req: Request, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
 
-    if (!roles.includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Forbidden: Access denied" });
-    }
+      console.log(`Checking role: user.role=${req.user.role}, requiredRoles=${roles}`);
+      if (!roles.includes(req.user.role)) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Forbidden: Access denied" });
+      }
 
-    next();
-  };
+      next();
+    };

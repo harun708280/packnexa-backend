@@ -73,62 +73,6 @@ router.get(
   MerchantController.getOnboardingConfig,
 );
 
-// klfjg
-/**
- * Apply for merchant account
- * Access: Authenticated User
- */
-// router.post("/apply", authMiddleware, MerchantController.applyMerchant);
 
-/**
- * Get own merchant profile
- * Access: Merchant (self)
- */
-// router.get("/me", authMiddleware, MerchantController.getMyMerchantProfile);
-
-/**
- * Update own merchant profile
- * Access: Merchant (self)
- */
-// router.patch("/me", authMiddleware, MerchantController.updateMyMerchantProfile);
-
-/**
- * ============================
- * ADMIN ROUTES
- * ============================
- */
-
-/**
- * Get all merchants (pagination, search, filter, sort)
- * Access: Admin only
- */
-// router.get(
-//   "/",
-//   authMiddleware,
-//   adminMiddleware,
-//   MerchantController.getAllMerchants,
-// );
-
-/**
- * Approve merchant application
- * Access: Admin only
- */
-// router.post(
-//   "/approve",
-//   authMiddleware,
-//   adminMiddleware,
-//   MerchantController.approveMerchant,
-// );
-
-/**
- * Reject merchant application
- * Access: Admin only
- */
-// router.post(
-//   "/reject",
-//   authMiddleware,
-//   adminMiddleware,
-//   MerchantController.rejectMerchant,
-// );
 
 export const merchantRoutes = router;

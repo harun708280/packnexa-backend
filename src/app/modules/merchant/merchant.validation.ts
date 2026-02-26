@@ -52,11 +52,7 @@ export const merchantPaymentsSchema = z.object({
   usedMethod: z.string().min(2, "Payment method is required"),
   paymentNumber: z.string().min(11, "Payment number is required"),
   bankDetails: z.string().min(2, "Bank details is required"),
-  // accountName: z.string().min(2, "Account name is required"),
-  // accountNumber: z.string().min(2, "Account number is required"),
-  // bankName: z.string().min(2, "Bank name is required"),
-  // bankCode: z.string().min(2, "Bank code is required"),
-  // accountType: z.string().min(2, "Account type is required"),
+
 });
 
 export type MerchantPaymentsInput = z.infer<typeof merchantPaymentsSchema>;

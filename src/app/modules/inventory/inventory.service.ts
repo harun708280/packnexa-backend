@@ -2,43 +2,37 @@ import { prisma } from "../../shared/prisma";
 
 export const addProductService = async (userId: string, data: any) => {
   try {
-    const merchant = await prisma.merchantProfile.findUnique({
+    const merchant = await prisma.merchantDetails.findUnique({
       where: { userId },
     });
     if (!merchant) throw new Error("Merchant profile not found");
-    if (!data.name || !data.sku || !data.price || !data.quantity) {
-      throw new Error("Missing required product fields");
-    }
-    const existingSku = await prisma.product.findUnique({
-      where: { sku: data.sku },
-    });
-    if (existingSku) throw new Error("SKU already exists");
+
 
     const product = await prisma.product.create({
       data: {
-        merchantId: merchant.id,
-        name: data.name,
-        sku: data.sku,
+        merchantDetailsId: merchant.id,
+        productName: data.name,
+        category: data.category || "General",
         description: data.description || "",
-        price: data.price,
-        quantity: data.quantity,
+        status: "PROCESSING",
       },
     });
 
     return product;
   } catch (error) {
+    console.error(error);
     throw new Error("Failed to add product");
   }
 };
 
 export const editProductService = async (
-  merchantId: string,
+  merchantDetailsId: string,
   productId: string,
   data: any
 ) => {
   try {
     const updated = await prisma.product.updateMany({
-      where: { id: productId, merchantId, status: "PENDING" },
+      where: { id: productId, merchantDetailsId, status: "PROCESSING" },
       data,
     });
 
@@ -52,12 +46,12 @@ export const editProductService = async (
 };
 
 export const deleteProductService = async (
-  merchantId: string,
+  merchantDetailsId: string,
   productId: string
 ) => {
   try {
     const deleted = await prisma.product.deleteMany({
-      where: { id: productId, merchantId, status: "PENDING" },
+      where: { id: productId, merchantDetailsId, status: "PROCESSING" },
     });
 
     if (deleted.count === 0)
@@ -69,22 +63,30 @@ export const deleteProductService = async (
 };
 
 export const listProductsService = async (
-  merchantId: string | null,
+  merchantDetailsId: string | null,
   isAdmin: boolean,
   pending?: boolean
 ) => {
   try {
     const where: any = {};
-    if (!isAdmin && merchantId) where.merchantId = merchantId;
-    if (pending) where.status = "PENDING";
+    if (!isAdmin && merchantDetailsId) where.merchantDetailsId = merchantDetailsId;
+    if (pending) where.status = "PROCESSING";
 
-    const products = await prisma.product.findMany({ where });
+    const products = await prisma.product.findMany({
+      where,
+      include: {
+        variants: {
+          include: {
+            pricing: true
+          }
+        }
+      }
+    });
     return products;
   } catch (error) {
     throw new Error("Failed to fetch products");
   }
 };
-
 
 export const approveProductService = async (
   productId: string,
@@ -105,7 +107,7 @@ export const approveProductService = async (
         data: {
           productId,
           action: "APPROVED",
-          quantity: product.quantity,
+          quantity: 0,
           location,
         },
       });
@@ -117,7 +119,6 @@ export const approveProductService = async (
   }
 };
 
-
 export const rejectProductService = async (
   productId: string,
   reason: string
@@ -127,7 +128,10 @@ export const rejectProductService = async (
 
     const product = await prisma.product.update({
       where: { id: productId },
-      data: { status: "REJECTED" },
+      data: {
+        status: "REJECTED",
+        rejectionReason: reason
+      },
     });
 
     if (!product) throw new Error("Product not found");
@@ -136,7 +140,7 @@ export const rejectProductService = async (
       data: {
         productId,
         action: "REJECTED",
-        quantity: product.quantity,
+        quantity: 0,
         location: reason,
       },
     });
@@ -146,7 +150,6 @@ export const rejectProductService = async (
     throw new Error("Failed to reject product");
   }
 };
-
 
 export const storeProductService = async (
   productId: string,
@@ -169,7 +172,6 @@ export const storeProductService = async (
     throw new Error("Failed to store product");
   }
 };
-
 
 export const getWarehouseLogsService = async (productId: string) => {
   try {

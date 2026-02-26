@@ -9,7 +9,7 @@ import { envVariables } from "./config";
 const app: Application = express();
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:5173"],
+    origin: ["http://localhost:3000", "http://localhost:5173", "https://packnexa-frontend.vercel.app"],
     credentials: true,
   })
 );

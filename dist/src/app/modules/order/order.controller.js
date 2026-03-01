@@ -79,12 +79,33 @@ const updateOrder = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
     });
 }));
 const getSingleOrder = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = req.user;
     const { id } = req.params;
-    const result = yield order_service_1.OrderService.getSingleOrder(id);
+    const result = yield order_service_1.OrderService.getSingleOrder(user.userId, id);
     (0, sendResponse_1.default)(res, {
         statusCode: 200,
         success: true,
         message: "Order fetched successfully",
+        data: result,
+    });
+}));
+const getOrderStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = req.user;
+    const result = yield order_service_1.OrderService.getOrderStats(user.userId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: 200,
+        success: true,
+        message: "Order statistics fetched successfully",
+        data: result,
+    });
+}));
+const trackOrder = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield order_service_1.OrderService.trackSteadfastOrder(id);
+    (0, sendResponse_1.default)(res, {
+        statusCode: 200,
+        success: true,
+        message: "Tracking information fetched successfully",
         data: result,
     });
 }));
@@ -96,4 +117,6 @@ exports.OrderController = {
     updateOrderStatus,
     updateOrder,
     deleteOrder,
+    getOrderStats,
+    trackOrder,
 };

@@ -1,20 +1,18 @@
 model MerchantDetails {
-  id          String  @id @default(uuid())
-  userId      String  @unique
-  isSubmitted Boolean @default(false)
-  isVerified  Boolean @default(false)
-
-  personalDetails PersonalDetails?
-  businessDetails BusinessDetails?
-  documents       Documents?
-  payments        Payments[]
-  products        Product[]
-  orders          Order[]
-
-  user User @relation(fields: [userId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  isSubmitted       Boolean            @default(false)
+  isVerified        Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  businessDetails   BusinessDetails?
+  documents         Documents?
+  user              User               @relation(fields: [userId], references: [id])
+  payments          Payments?
+  personalDetails   PersonalDetails?
+  externalOrderLogs ExternalOrderLog[]
+  orders            Order[]
+  products          Product[]
 }
 
 model PersonalDetails {
@@ -27,42 +25,37 @@ model PersonalDetails {
   isProfilePhotoVerified Boolean         @default(false)
   location               String?
   isVerifiedPhaseOne     Boolean         @default(false)
-  merchantDetails        MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
+  merchantDetails        MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
 }
 
 model BusinessDetails {
-  id                String @id @default(uuid())
-  merchantDetailsId String @unique
-
-  businessName       String
-  businessLogo       String?
-  businessType       String
-  facebookPageLink   String?
-  websiteLink        String?
-  dailyOrderEstimate Int?
-  storageSpace       String?
-  courierPartner     String?
-  paymentMethods     String?
-  pickupHub          String?
-  bio                String?
-  businessLocation   String
-
-  isBusinessLogoVerified Boolean @default(false)
-  isVerifiedPhaseTwo     Boolean @default(false)
+  id                     String          @id @default(uuid())
+  merchantDetailsId      String          @unique
+  businessName           String
+  businessLogo           String?
+  businessType           String
+  facebookPageLink       String?
+  websiteLink            String?
+  dailyOrderEstimate     Int?
+  storageSpace           String?
+  courierPartner         String?
+  paymentMethods         String?
+  pickupHub              String?
+  bio                    String?
+  businessLocation       String
+  isBusinessLogoVerified Boolean         @default(false)
+  isVerifiedPhaseTwo     Boolean         @default(false)
   subscriptionType       String?
-
-  merchantDetails MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  merchantDetails        MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
 }
 
 model Documents {
-  id                String @id @default(uuid())
-  merchantDetailsId String @unique
-
+  id                   String          @id @default(uuid())
+  merchantDetailsId    String          @unique
   nidFront             String
   nidBack              String
   passport             String?
@@ -74,9 +67,9 @@ model Documents {
   status               DocumentStatus  @default(PENDING)
   reviewReason         String?
   isVerifiedPhaseThree Boolean         @default(false)
-  merchantDetails      MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
+  merchantDetails      MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
 }
 
 model Payments {
@@ -87,35 +80,6 @@ model Payments {
   paymentNumber       String
   bankDetails         String
   isVerifiedPhaseFour Boolean         @default(false)
-  merchantDetails     MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
   createdAt           DateTime        @default(now())
+  merchantDetails     MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
 }
-
-// model Product {
-//   id          String        @id @default(uuid())
-//   merchantId  String
-//   name        String
-//   sku         String        @unique
-//   description String
-//   price       Float
-//   quantity    Int
-//   status      ProductStatus @default(PENDING)
-//   createdAt   DateTime      @default(now())
-//   updatedAt   DateTime      @updatedAt
-
-//   // merchant      MerchantProfile @relation(fields: [merchantId], references: [id])
-//   warehouseLogs     WarehouseLog[]
-//   // merchantProfile   MerchantProfile? @relation(fields: [merchantProfileId], references: [id])
-//   merchantProfileId String?
-// }
-
-// model WarehouseLog {
-//   id        String   @id @default(uuid())
-//   productId String
-//   action    String
-//   quantity  Int
-//   location  String?
-//   createdAt DateTime @default(now())
-
-//   product Product @relation(fields: [productId], references: [id])
-// }

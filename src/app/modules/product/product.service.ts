@@ -1,5 +1,6 @@
-import { ProductStatus } from "@prisma/client";
+import { Product, ProductStatus } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
+import { IGenericResponse, IProductFilters } from "./product.interface";
 import { generateUniqueSKU } from "./product.utils";
 
 const createProduct = async (userId: string, payload: any) => {
@@ -32,7 +33,6 @@ const createProduct = async (userId: string, payload: any) => {
         productName,
         description,
         category,
-        merchantWebProductId,
         merchantDetailsId: merchantDetails.id,
         status: "PROCESSING",
         productImages: productImages && productImages.length > 0 ? {
@@ -73,6 +73,8 @@ const createProduct = async (userId: string, payload: any) => {
           invoiceId: variant.invoiceId,
           variantImage: imageUrl || variant.variantImage,
           productId: createdProduct.id,
+          merchantDetailsId: merchantDetails.id,
+          merchantWebProductId: variant.merchantWebProductId,
           sku,
           warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : warehouse.id,
           pricing: variantPricing,
@@ -102,7 +104,10 @@ const createProduct = async (userId: string, payload: any) => {
   return result;
 };
 
-const getMyProducts = async (userId: string, query: { page?: string, limit?: string, status?: string } = {}) => {
+const getMyProducts = async (
+  userId: string,
+  query: IProductFilters = {}
+): Promise<IGenericResponse<Product[]>> => {
   const merchantDetails = await prisma.merchantDetails.findUnique({
     where: { userId },
   });
@@ -111,41 +116,73 @@ const getMyProducts = async (userId: string, query: { page?: string, limit?: str
     throw new Error("Merchant details not found");
   }
 
-  const { page = "1", limit = "10", status } = query;
+  const { page = "1", limit = "10", status, searchTerm, category } = query;
   const skip = (Number(page) - 1) * Number(limit);
   const take = Number(limit);
 
   const where: any = { merchantDetailsId: merchantDetails.id };
-  if (status) {
+  if (status && status !== "ALL") {
     where.status = status;
   }
 
+  if (category && category !== "all") {
+    where.category = category;
+  }
+
+  if (searchTerm) {
+    where.OR = [
+      { productName: { contains: searchTerm, mode: "insensitive" } },
+      { productCode: { contains: searchTerm, mode: "insensitive" } },
+      { description: { contains: searchTerm, mode: "insensitive" } },
+    ];
+  }
+
+  // 1. Fetch products with basic info
   const [data, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: {
-        variants: {
-          select: {
-            id: true,
-            variantName: true,
-            quantity: true,
-            soldQuantity: true,
-            sku: true,
-            variantImage: true,
-            pricing: true,
-          }
-        },
-        productImages: {
-          take: 1
-        },
-      },
       orderBy: { createdAt: "desc" },
       skip,
       take,
     }),
-    prisma.product.count({ where: { merchantDetailsId: merchantDetails.id } })
+    prisma.product.count({ where })
   ]);
 
+  if (data.length === 0) {
+    return { meta: { page: Number(page), limit: Number(limit), total }, data: [] };
+  }
+
+  const productIds = data.map(p => p.id);
+
+  // 2. Fetch all related data in batches to avoid N+1
+  const [images, variants] = await Promise.all([
+    prisma.productImage.findMany({
+      where: { productId: { in: productIds } },
+      select: { id: true, productId: true, imageUrl: true, createdAt: true }
+    }),
+    prisma.productVariant.findMany({
+      where: { productId: { in: productIds } },
+      include: {
+        pricing: true,
+        stockControl: true
+      }
+    })
+  ]);
+
+  // 3. Manually join the data
+  const result = data.map(product => {
+    const productImages = images.filter(img => img.productId === product.id).slice(0, 1);
+    const productVariants = variants.filter(v => v.productId === product.id).map(v => {
+      const { ...vRest } = v;
+      return vRest;
+    });
+
+    return {
+      ...product,
+      productImages,
+      variants: productVariants
+    };
+  });
 
   return {
     meta: {
@@ -153,7 +190,7 @@ const getMyProducts = async (userId: string, query: { page?: string, limit?: str
       limit: Number(limit),
       total,
     },
-    data,
+    data: result as any,
   };
 };
 
@@ -179,17 +216,22 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
   const [data, total, pendingCount, approvedCount, rejectedCount] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: {
-        variants: {
-          include: {
-            pricing: true,
-            location: true,
-            stockControl: true,
-          }
+      select: {
+        id: true,
+        productName: true,
+        productCode: true,
+        category: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        merchantDetailsId: true,
+        description: true,
+        rejectionReason: true,
+        productImages: {
+          select: { imageUrl: true }
         },
-        productImages: true,
         merchantDetails: {
-          include: {
+          select: {
             user: {
               select: {
                 firstName: true,
@@ -198,20 +240,28 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
                 contactNumber: true,
               },
             },
-            personalDetails: {
-              select: {
-                profilePhoto: true,
-              }
-            },
             businessDetails: {
               select: {
                 businessName: true,
-                businessType: true,
                 businessLogo: true,
               }
             }
           },
         },
+        variants: {
+          select: {
+            id: true,
+            variantName: true,
+            quantity: true,
+            sku: true,
+            variantImage: true,
+            pricing: {
+              select: {
+                salePrice: true
+              }
+            }
+          }
+        }
       },
       orderBy: { createdAt: "desc" },
       skip,
@@ -307,7 +357,6 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
         productName,
         description,
         category,
-        merchantWebProductId,
         status: ProductStatus.PROCESSING,
         rejectionReason: null,
         productImages: productImages ? {
@@ -361,6 +410,8 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
               supplier: variant.supplier || rest.supplier,
               invoiceId: variant.invoiceId,
               variantImage: imageUrl || variant.variantImage,
+              merchantDetailsId: merchantDetails.id,
+              merchantWebProductId: variant.merchantWebProductId,
               warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : undefined,
               pricing: updatePricing,
               location: location ? { upsert: { create: location, update: location } } : undefined,
@@ -386,6 +437,8 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
               invoiceId: variant.invoiceId,
               variantImage: imageUrl || variant.variantImage,
               productId,
+              merchantDetailsId: merchantDetails.id,
+              merchantWebProductId: variant.merchantWebProductId,
               sku,
               warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : (await tx.warehouse.findFirst())?.id || "",
               pricing: (purchasePrice !== undefined && salePrice !== undefined) ? {

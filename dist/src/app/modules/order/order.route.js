@@ -14,10 +14,11 @@ const order_validation_1 = require("./order.validation");
 exports.router = express_1.default.Router();
 exports.router.post("/create-order", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.MERCHANT), (0, validateRequest_1.default)(order_validation_1.OrderValidation.createOrderSchema), order_controller_1.OrderController.createOrder);
 exports.router.get("/my-orders", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.MERCHANT), order_controller_1.OrderController.getMyOrders);
+exports.router.get("/stats", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.MERCHANT), order_controller_1.OrderController.getOrderStats);
 exports.router.get("/all-orders", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.ADMIN), order_controller_1.OrderController.getAllOrders);
 exports.router.get("/:id", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.MERCHANT, client_1.UserRole.ADMIN), order_controller_1.OrderController.getSingleOrder);
 exports.router.patch("/update-status/:id", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.ADMIN, client_1.UserRole.MERCHANT), (0, validateRequest_1.default)(order_validation_1.OrderValidation.updateOrderStatusSchema), order_controller_1.OrderController.updateOrderStatus);
 exports.router.patch("/update-order/:id", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.MERCHANT), order_controller_1.OrderController.updateOrder);
+exports.router.get("/track/:id", auth_middleware_1.authMiddleware, order_controller_1.OrderController.trackOrder);
 exports.router.delete("/delete/:id", auth_middleware_1.authMiddleware, (0, requireRole_middleware_1.requireRole)(client_1.UserRole.ADMIN, client_1.UserRole.MERCHANT), order_controller_1.OrderController.deleteOrder);
-// d
 exports.orderRoutes = exports.router;

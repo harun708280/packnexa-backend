@@ -11,8 +11,14 @@ const merchant_routes_1 = require("../modules/merchant/merchant.routes");
 const product_route_1 = require("../modules/product/product.route");
 const user_routes_1 = require("../modules/user/user.routes");
 const order_route_1 = require("../modules/order/order.route");
+const externalOrder_routes_1 = require("../modules/externalOrder/externalOrder.routes");
+const upload_route_1 = require("../modules/upload/upload.route");
 const router = express_1.default.Router();
 const moduleRoutes = [
+    {
+        path: "/upload",
+        route: upload_route_1.uploadRoutes,
+    },
     {
         path: "/user",
         route: user_routes_1.userRoutes,
@@ -40,6 +46,10 @@ const moduleRoutes = [
     {
         path: "/order",
         route: order_route_1.orderRoutes,
+    },
+    {
+        path: "/external-order",
+        route: externalOrder_routes_1.ExternalOrderRoutes,
     },
 ];
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

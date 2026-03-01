@@ -78,8 +78,9 @@ const updateOrder = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getSingleOrder = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
     const { id } = req.params;
-    const result = await OrderService.getSingleOrder(id);
+    const result = await OrderService.getSingleOrder(user.userId, id);
 
     sendResponse(res, {
         statusCode: 200,
@@ -89,6 +90,31 @@ const getSingleOrder = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const getOrderStats = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const result = await OrderService.getOrderStats(user.userId);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Order statistics fetched successfully",
+        data: result,
+    });
+});
+
+const trackOrder = catchAsync(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const result = await OrderService.trackSteadfastOrder(id);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Tracking information fetched successfully",
+        data: result,
+    });
+});
+
+
 export const OrderController = {
     createOrder,
     getMyOrders,
@@ -97,4 +123,6 @@ export const OrderController = {
     updateOrderStatus,
     updateOrder,
     deleteOrder,
+    getOrderStats,
+    trackOrder,
 };

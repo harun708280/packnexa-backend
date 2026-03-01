@@ -9,7 +9,8 @@ const createOrderItemSchema = zod_1.z.object({
 });
 const createOrderSchema = zod_1.z.object({
     customerName: zod_1.z.string().min(1, "Customer name is required"),
-    customerPhone: zod_1.z.string().min(1, "Customer phone is required"),
+    customerPhone: zod_1.z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)"),
+    alternativePhone: zod_1.z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)").optional().nullable(),
     customerEmail: zod_1.z.string().email().optional().nullable(),
     deliveryAddress: zod_1.z.string().min(1, "Delivery address is required"),
     district: zod_1.z.string().min(1, "District is required"),

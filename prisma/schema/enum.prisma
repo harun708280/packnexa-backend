@@ -82,6 +82,7 @@ enum OrderSource {
   TIKTOK
   INSTAGRAM
   MANUAL
+  WORDPRESS
 }
 
 enum OrderStatus {
@@ -92,4 +93,5 @@ enum OrderStatus {
   DELIVERED
   COMPLETED
   CANCELLED
+  RETURNED
 }

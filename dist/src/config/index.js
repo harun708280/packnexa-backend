@@ -31,6 +31,10 @@ exports.envVariables = {
     BCRYPT_SALT_ROUND: Number(process.env.BCRYPT_SALT_ROUND || 10),
     FORGOT_PASSWORD_OTP_EXPIRE_MINUTES: Number(process.env.FORGOT_PASSWORD_OTP_EXPIRE_MINUTES || 10),
     FRONTEND_URL: process.env.FRONTEND_URL,
+    STEADFAST: {
+        API_KEY: process.env.STEADFAST_API_KEY,
+        SECRET_KEY: process.env.STEADFAST_SECRET_KEY,
+    }
 };
 exports.config = {
     env: exports.envVariables.NODE_ENV,
@@ -55,5 +59,9 @@ exports.config = {
     },
     bcrypt_salt_rounds: exports.envVariables.BCRYPT_SALT_ROUND,
     frontend_url: exports.envVariables.FRONTEND_URL,
+    steadfast: {
+        api_key: exports.envVariables.STEADFAST.API_KEY,
+        secret_key: exports.envVariables.STEADFAST.SECRET_KEY,
+    },
 };
 exports.default = exports.config;

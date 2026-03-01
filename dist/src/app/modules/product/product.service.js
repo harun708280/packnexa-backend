@@ -46,7 +46,6 @@ const createProduct = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
                 productName,
                 description,
                 category,
-                merchantWebProductId,
                 merchantDetailsId: merchantDetails.id,
                 status: "PROCESSING",
                 productImages: productImages && productImages.length > 0 ? {
@@ -80,6 +79,8 @@ const createProduct = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
                     invoiceId: variant.invoiceId,
                     variantImage: imageUrl || variant.variantImage,
                     productId: createdProduct.id,
+                    merchantDetailsId: merchantDetails.id,
+                    merchantWebProductId: variant.merchantWebProductId,
                     sku,
                     warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : warehouse.id,
                     pricing: variantPricing,
@@ -113,45 +114,67 @@ const getMyProducts = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...a
     if (!merchantDetails) {
         throw new Error("Merchant details not found");
     }
-    const { page = "1", limit = "10", status } = query;
+    const { page = "1", limit = "10", status, searchTerm, category } = query;
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
     const where = { merchantDetailsId: merchantDetails.id };
-    if (status) {
+    if (status && status !== "ALL") {
         where.status = status;
     }
+    if (category && category !== "all") {
+        where.category = category;
+    }
+    if (searchTerm) {
+        where.OR = [
+            { productName: { contains: searchTerm, mode: "insensitive" } },
+            { productCode: { contains: searchTerm, mode: "insensitive" } },
+            { description: { contains: searchTerm, mode: "insensitive" } },
+        ];
+    }
+    // 1. Fetch products with basic info
     const [data, total] = yield Promise.all([
         prisma_1.prisma.product.findMany({
             where,
-            include: {
-                variants: {
-                    select: {
-                        id: true,
-                        variantName: true,
-                        quantity: true,
-                        soldQuantity: true,
-                        sku: true,
-                        variantImage: true,
-                        pricing: true,
-                    }
-                },
-                productImages: {
-                    take: 1
-                },
-            },
             orderBy: { createdAt: "desc" },
             skip,
             take,
         }),
-        prisma_1.prisma.product.count({ where: { merchantDetailsId: merchantDetails.id } })
+        prisma_1.prisma.product.count({ where })
     ]);
+    if (data.length === 0) {
+        return { meta: { page: Number(page), limit: Number(limit), total }, data: [] };
+    }
+    const productIds = data.map(p => p.id);
+    // 2. Fetch all related data in batches to avoid N+1
+    const [images, variants] = yield Promise.all([
+        prisma_1.prisma.productImage.findMany({
+            where: { productId: { in: productIds } },
+            select: { id: true, productId: true, imageUrl: true, createdAt: true }
+        }),
+        prisma_1.prisma.productVariant.findMany({
+            where: { productId: { in: productIds } },
+            include: {
+                pricing: true,
+                stockControl: true
+            }
+        })
+    ]);
+    // 3. Manually join the data
+    const result = data.map(product => {
+        const productImages = images.filter(img => img.productId === product.id).slice(0, 1);
+        const productVariants = variants.filter(v => v.productId === product.id).map(v => {
+            const vRest = __rest(v, []);
+            return vRest;
+        });
+        return Object.assign(Object.assign({}, product), { productImages, variants: productVariants });
+    });
     return {
         meta: {
             page: Number(page),
             limit: Number(limit),
             total,
         },
-        data,
+        data: result,
     };
 });
 const getAllProducts = (...args_1) => __awaiter(void 0, [...args_1], void 0, function* (query = {}) {
@@ -172,17 +195,22 @@ const getAllProducts = (...args_1) => __awaiter(void 0, [...args_1], void 0, fun
     const [data, total, pendingCount, approvedCount, rejectedCount] = yield Promise.all([
         prisma_1.prisma.product.findMany({
             where,
-            include: {
-                variants: {
-                    include: {
-                        pricing: true,
-                        location: true,
-                        stockControl: true,
-                    }
+            select: {
+                id: true,
+                productName: true,
+                productCode: true,
+                category: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                merchantDetailsId: true,
+                description: true,
+                rejectionReason: true,
+                productImages: {
+                    select: { imageUrl: true }
                 },
-                productImages: true,
                 merchantDetails: {
-                    include: {
+                    select: {
                         user: {
                             select: {
                                 firstName: true,
@@ -191,20 +219,28 @@ const getAllProducts = (...args_1) => __awaiter(void 0, [...args_1], void 0, fun
                                 contactNumber: true,
                             },
                         },
-                        personalDetails: {
-                            select: {
-                                profilePhoto: true,
-                            }
-                        },
                         businessDetails: {
                             select: {
                                 businessName: true,
-                                businessType: true,
                                 businessLogo: true,
                             }
                         }
                     },
                 },
+                variants: {
+                    select: {
+                        id: true,
+                        variantName: true,
+                        quantity: true,
+                        sku: true,
+                        variantImage: true,
+                        pricing: {
+                            select: {
+                                salePrice: true
+                            }
+                        }
+                    }
+                }
             },
             orderBy: { createdAt: "desc" },
             skip,
@@ -287,7 +323,6 @@ const updateProduct = (userId, productId, payload) => __awaiter(void 0, void 0, 
                 productName,
                 description,
                 category,
-                merchantWebProductId,
                 status: client_1.ProductStatus.PROCESSING,
                 rejectionReason: null,
                 productImages: productImages ? {
@@ -332,6 +367,8 @@ const updateProduct = (userId, productId, payload) => __awaiter(void 0, void 0, 
                             supplier: variant.supplier || rest.supplier,
                             invoiceId: variant.invoiceId,
                             variantImage: imageUrl || variant.variantImage,
+                            merchantDetailsId: merchantDetails.id,
+                            merchantWebProductId: variant.merchantWebProductId,
                             warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : undefined,
                             pricing: updatePricing,
                             location: location ? { upsert: { create: location, update: location } } : undefined,
@@ -356,6 +393,8 @@ const updateProduct = (userId, productId, payload) => __awaiter(void 0, void 0, 
                             invoiceId: variant.invoiceId,
                             variantImage: imageUrl || variant.variantImage,
                             productId,
+                            merchantDetailsId: merchantDetails.id,
+                            merchantWebProductId: variant.merchantWebProductId,
                             sku,
                             warehouseId: variant.warehouseId && variant.warehouseId !== "default-warehouse-id" ? variant.warehouseId : ((_a = (yield tx.warehouse.findFirst())) === null || _a === void 0 ? void 0 : _a.id) || "",
                             pricing: (purchasePrice !== undefined && salePrice !== undefined) ? {

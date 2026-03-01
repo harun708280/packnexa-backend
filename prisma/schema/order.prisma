@@ -2,7 +2,6 @@ model Order {
   id                String          @id @default(uuid())
   merchantDetailsId String
   orderNumber       String          @unique
-  trackingNumber    String?         @unique
   orderSource       OrderSource     @default(MANUAL)
   status            OrderStatus     @default(PENDING)
   customerName      String
@@ -11,36 +10,40 @@ model Order {
   deliveryAddress   String
   district          String
   area              String
-  zipCode           String?
   paymentMethod     String          @default("COD")
   preferredCourier  String?
-  isPreBooking      Boolean         @default(false)
-  preBookingDate    DateTime?
   subtotal          Float           @default(0)
   deliveryCharge    Float           @default(60)
   discount          Float           @default(0)
   totalPayable      Float           @default(0)
   merchantNote      String?
   adminNote         String?
-  merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
-  items             OrderItem[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+  isPreBooking      Boolean         @default(false)
+  preBookingDate    DateTime?
+  zipCode           String?
+  trackingNumber    String?         @unique
+  alternativePhone  String?
+  items             OrderItem[]
+  merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
+
   @@index([merchantDetailsId])
   @@index([status])
   @@map("orders")
 }
 
 model OrderItem {
-  id              String         @id @default(uuid())
-  orderId         String
-  variantId       String
-  quantity        Int
-  unitPrice       Float
-  totalPrice      Float
-  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant         ProductVariant @relation(fields: [variantId], references: [id])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id         String         @id @default(uuid())
+  orderId    String
+  variantId  String
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+
   @@map("order_items")
 }

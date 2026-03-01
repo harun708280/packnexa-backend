@@ -25,6 +25,13 @@ router.get(
 );
 
 router.get(
+    "/stats",
+    authMiddleware,
+    requireRole(UserRole.MERCHANT),
+    OrderController.getOrderStats
+);
+
+router.get(
     "/all-orders",
     authMiddleware,
     requireRole(UserRole.ADMIN),
@@ -53,11 +60,17 @@ router.patch(
     OrderController.updateOrder
 );
 
+router.get(
+    "/track/:id",
+    authMiddleware,
+    OrderController.trackOrder
+);
+
 router.delete(
     "/delete/:id",
     authMiddleware,
     requireRole(UserRole.ADMIN, UserRole.MERCHANT),
     OrderController.deleteOrder
 );
-// d
+
 export const orderRoutes = router;

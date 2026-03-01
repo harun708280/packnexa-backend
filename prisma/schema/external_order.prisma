@@ -1,0 +1,13 @@
+model ExternalOrderLog {
+  id                String          @id @default(uuid())
+  merchantDetailsId String
+  externalOrderId   String?
+  rawPayload        Json
+  status            String          @default("PENDING")
+  errorMessage      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
+
+  @@map("external_order_logs")
+}

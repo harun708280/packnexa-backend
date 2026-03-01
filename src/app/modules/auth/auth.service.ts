@@ -60,12 +60,16 @@ const login = async (email: string, password: string) => {
     data: { otp: hashedOtp, otpExpires },
   });
 
-  await sendEmail({
-    to: email,
-    subject: "Your OTP Code",
-    text: `Your OTP code is: ${otp}`,
-    html: otpEmail(otp),
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Your OTP Code",
+      text: `Your OTP code is: ${otp}`,
+      html: otpEmail(otp),
+    });
+  } catch (error) {
+    console.error("Login OTP email failed:", error);
+  }
 
   return { message: "OTP sent to email", otpExpires };
 };
@@ -153,12 +157,16 @@ const resendOtp = async (email: string) => {
     data: { otp: hashedOtp, otpExpires },
   });
 
-  await sendEmail({
-    to: email,
-    subject: "Your New OTP Code",
-    text: `Your OTP code is: ${otp}`,
-    html: resendOtpEmail(otp),
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Your New OTP Code",
+      text: `Your OTP code is: ${otp}`,
+      html: resendOtpEmail(otp),
+    });
+  } catch (error) {
+    console.error("Resend OTP email failed:", error);
+  }
 
   return { message: "New OTP sent successfully", otpExpires };
 };
@@ -181,12 +189,16 @@ const forgetPassword = async (email: string) => {
     data: { otp: hashedOtp, otpExpires, otpAttempts: 0 },
   });
 
-  await sendEmail({
-    to: email,
-    subject: "Your OTP Code",
-    text: `Your OTP code is: ${otp}`,
-    html: forgetPasswordEmail(otp),
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Your OTP Code",
+      text: `Your OTP code is: ${otp}`,
+      html: forgetPasswordEmail(otp),
+    });
+  } catch (error) {
+    console.error("Forget password email failed:", error);
+  }
 
   return { message: "OTP has been sent", otpExpires };
 };

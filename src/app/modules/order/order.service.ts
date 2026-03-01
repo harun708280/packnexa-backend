@@ -1,6 +1,6 @@
 import { OrderStatus } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
-import { SteadfastService } from "./steadfastService";
+import { SteadfastService } from "./steadfast-service";
 
 const createOrder = async (userId: string, payload: any) => {
     const merchantDetails = await prisma.merchantDetails.findUnique({

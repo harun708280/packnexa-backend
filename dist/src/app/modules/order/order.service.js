@@ -23,7 +23,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderService = void 0;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../../shared/prisma");
-const steadfast_service_1 = require("./steadfast.service");
+const steadfastService_1 = require("./steadfastService");
 const createOrder = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     const merchantDetails = yield prisma_1.prisma.merchantDetails.findUnique({
         where: { userId },
@@ -352,7 +352,7 @@ const updateOrderStatus = (orderId, payload) => __awaiter(void 0, void 0, void 0
     if (isTargetingShipped && isSteadfastCourier) {
         console.log(`[DEBUG] Triggering Steadfast API for order ${result.orderNumber}`);
         try {
-            const steadfastResponse = yield steadfast_service_1.SteadfastService.createOrder(result);
+            const steadfastResponse = yield steadfastService_1.SteadfastService.createOrder(result);
             if (steadfastResponse && (steadfastResponse.status === 200 || steadfastResponse.status === 201) && steadfastResponse.consignment) {
                 yield prisma_1.prisma.order.update({
                     where: { id: orderId },
@@ -592,7 +592,7 @@ const trackSteadfastOrder = (orderId) => __awaiter(void 0, void 0, void 0, funct
     if (!((_a = order.preferredCourier) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes("steadfast"))) {
         return { message: "This order is not associated with Steadfast Courier" };
     }
-    const steadfastResult = yield steadfast_service_1.SteadfastService.trackOrder(order.orderNumber);
+    const steadfastResult = yield steadfastService_1.SteadfastService.trackOrder(order.orderNumber);
     if (steadfastResult && steadfastResult.status === 200 && steadfastResult.delivery_status) {
         const sStatus = steadfastResult.delivery_status.toLowerCase();
         let newStatus = null;

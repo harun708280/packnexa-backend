@@ -12,7 +12,7 @@ const routes_1 = __importDefault(require("./app/routes"));
 const config_1 = require("./config");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: ["http://localhost:3000", "http://localhost:5173", "https://packnexa-frontend.vercel.app"],
+    origin: ["http://localhost:3000", "http://localhost:5173", "https://packnexa-frontend.vercel.app", "https://packnexa-by-harun.netlify.app"],
     credentials: true,
 }));
 // kf

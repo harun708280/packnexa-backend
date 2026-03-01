@@ -21,57 +21,31 @@ const login = async (email: string, password: string) => {
 
   if (!isMatch) throw new AppError(400, "Invalid credentials");
 
-  if (envVariables.NODE_ENV === "development") {
-    const accessToken = jwtHelper.generateToken(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      envVariables.JWT_ACCESS_SECRET,
-      envVariables.JWT_ACCESS_EXPIRES
-    );
-
-    const refreshToken = jwtHelper.generateToken(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      envVariables.JWT_REFRESH_SECRET,
-      envVariables.JWT_REFRESH_EXPIRES
-    );
-
-    return {
-      accessToken,
-      refreshToken,
-      user: { id: user.id, email: user.email, role: user.role },
-    };
-  }
-
-  const otp = generateOTP();
-  const hashedOtp = await bcrypt.hash(otp, envVariables.BCRYPT_SALT_ROUND);
-  const otpExpires = new Date(
-    Date.now() + envVariables.FORGOT_PASSWORD_OTP_EXPIRE_MINUTES * 60 * 1000
+  const accessToken = jwtHelper.generateToken(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    },
+    envVariables.JWT_ACCESS_SECRET,
+    envVariables.JWT_ACCESS_EXPIRES
   );
 
-  await prisma.user.update({
-    where: { email },
-    data: { otp: hashedOtp, otpExpires },
-  });
+  const refreshToken = jwtHelper.generateToken(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    },
+    envVariables.JWT_REFRESH_SECRET,
+    envVariables.JWT_REFRESH_EXPIRES
+  );
 
-  try {
-    await sendEmail({
-      to: email,
-      subject: "Your OTP Code",
-      text: `Your OTP code is: ${otp}`,
-      html: otpEmail(otp),
-    });
-  } catch (error) {
-    console.error("Login OTP email failed:", error);
-  }
-
-  return { message: "OTP sent to email", otpExpires };
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, email: user.email, role: user.role },
+  };
 };
 
 const verifyOtp = async (email: string, otp: string) => {

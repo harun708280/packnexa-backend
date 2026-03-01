@@ -15,43 +15,34 @@ const login = catchAsync(
   async (req: Request<{}, {}, LoginInput>, res: Response) => {
     const { email, password } = req.body;
 
-    if (envVariables.NODE_ENV === "development") {
-      const { accessToken, refreshToken, user } = await AuthService.login(
-        email,
-        password
-      );
+    const { accessToken, refreshToken, user } = await AuthService.login(
+      email,
+      password
+    );
 
-      res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: envVariables.JWT_ACCESS_EXPIRES_MAX_AGE,
-        path: "/",
-      });
+    const isProduction = envVariables.NODE_ENV === "production";
 
-      res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: envVariables.JWT_REFRESH_EXPIRES_MAX_AGE,
-        path: "/",
-      });
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: envVariables.JWT_ACCESS_EXPIRES_MAX_AGE,
+      path: "/",
+    });
 
-      return sendResponse(res, {
-        statusCode: 200,
-        success: true,
-        message: "Login successful",
-        data: user,
-      });
-    }
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: envVariables.JWT_REFRESH_EXPIRES_MAX_AGE,
+      path: "/",
+    });
 
-    const { message, otpExpires } = await AuthService.login(email, password);
-
-    sendResponse(res, {
+    return sendResponse(res, {
       statusCode: 200,
       success: true,
-      message,
-      data: { otpExpires },
+      message: "Login successful",
+      data: user,
     });
   }
 );

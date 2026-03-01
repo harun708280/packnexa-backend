@@ -25,12 +25,17 @@ const createUser = async (Payload: CreateUserData) => {
     },
   });
 
-  await sendEmail({
-    to: email,
-    subject: "Welcome to Packnexa!",
-    text: `Hello ${firstName}, your registration is successful!`,
-    html: welcomeEmail(firstName, lastName),
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Welcome to Packnexa!",
+      text: `Hello ${firstName}, your registration is successful!`,
+      html: welcomeEmail(firstName, lastName),
+    });
+  } catch (error) {
+    console.error("Email sending failed:", error);
+    // Don't throw error here, so user creation still succeeds
+  }
 
   return { user };
 };

@@ -12,6 +12,7 @@ interface Order {
     area: string;
     totalPayable: number;
     merchantNote?: string | null;
+    paymentMethod?: string | null;
 }
 
 interface SteadfastOrderResponse {
@@ -46,7 +47,14 @@ const createOrder = async (order: Order): Promise<SteadfastOrderResponse | null>
         recipient_phone: order.customerPhone.replace(/[^0-9]/g, "").slice(-11),
         recipient_address: `${order.deliveryAddress}, ${order.area}, ${order.district}`.slice(0, 250),
         recipient_email: order.customerEmail || "",
-        cod_amount: order.totalPayable,
+        cod_amount: (() => {
+            const method = (order.paymentMethod || "COD").toUpperCase();
+            // Check for common Cash on Delivery variations
+            if (method.includes("COD") || method.includes("CASH") || method.includes("HAND") || method === "PAY ON DELIVERY") {
+                return order.totalPayable;
+            }
+            return 0;
+        })(),
         note: (order.merchantNote || "").slice(0, 500),
     };
 

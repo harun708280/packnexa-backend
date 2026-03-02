@@ -459,7 +459,7 @@ const getSingleOrder = async (userId: string, orderId: string) => {
         throw new Error("Merchant details not found");
     }
 
-    const order = await prisma.order.findUnique({
+    const order = await prisma.order.findFirst({
         where: { id: orderId, merchantDetailsId: merchantDetails.id },
         include: {
             items: {

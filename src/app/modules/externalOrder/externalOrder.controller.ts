@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import catchAsync from "../../shared/catchAsync";
 import sendResponse from "../../shared/sendResponse";
 import { ExternalOrderService } from "./externalOrder.service";
+import { prisma } from "../../shared/prisma";
+import httpStatus from "http-status";
+import AppError from "../../errorHelper/AppError";
 
 const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
     // In a real scenario, we would validate the API Key/Secret here
@@ -45,8 +48,17 @@ const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
 
 const getExternalLogs = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    // Assuming user is connected to merchantDetails
-    const result = await ExternalOrderService.getExternalLogs(user.merchantDetailsId);
+
+    // Fetch merchantDetailsId using userId since it's not in the token
+    const merchant = await prisma.merchantDetails.findUnique({
+        where: { userId: user.userId }
+    });
+
+    if (!merchant) {
+        throw new AppError(httpStatus.NOT_FOUND, "Merchant details not found for this user");
+    }
+
+    const result = await ExternalOrderService.getExternalLogs(merchant.id);
 
     sendResponse(res, {
         statusCode: 200,
@@ -59,7 +71,16 @@ const getExternalLogs = catchAsync(async (req: Request, res: Response) => {
 const retrySync = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { id } = req.params;
-    const result = await ExternalOrderService.retrySync(user.merchantDetailsId, id);
+
+    const merchant = await prisma.merchantDetails.findUnique({
+        where: { userId: user.userId }
+    });
+
+    if (!merchant) {
+        throw new AppError(httpStatus.NOT_FOUND, "Merchant details not found for this user");
+    }
+
+    const result = await ExternalOrderService.retrySync(merchant.id, id);
 
     sendResponse(res, {
         statusCode: 200,

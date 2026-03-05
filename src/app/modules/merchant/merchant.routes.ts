@@ -73,6 +73,12 @@ router.get(
   MerchantController.getOnboardingConfig,
 );
 
+router.get(
+  "/dashboard-stats",
+  authMiddleware,
+  MerchantController.getDashboardStats,
+);
+
 
 
 export const merchantRoutes = router;

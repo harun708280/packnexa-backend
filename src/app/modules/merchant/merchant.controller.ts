@@ -173,6 +173,18 @@ const getOnboardingConfig = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await MerchantService.getDashboardStats(user.userId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Dashboard statistics fetched successfully",
+    data: result,
+  });
+});
+
 export const MerchantController = {
   personalDetails,
   getPersonalDetails,
@@ -184,6 +196,7 @@ export const MerchantController = {
   getPayments,
   completeOnboarding,
   getOnboardingConfig,
+  getDashboardStats,
   // kkkkk
   // applyMerchant,
   // getAllMerchants,

@@ -13,6 +13,7 @@ model MerchantDetails {
   externalOrderLogs ExternalOrderLog[]
   orders            Order[]
   products          Product[]
+  webhookSecret     String?            @unique
 }
 
 model PersonalDetails {

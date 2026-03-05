@@ -10,12 +10,35 @@ const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
     // In a real scenario, we would validate the API Key/Secret here
     // For now, we assume the merchantDetailsId is passed in the headers or body for development
     const merchantDetailsId = req.headers["x-merchant-id"] as string;
+    const providedSecret = req.headers["x-webhook-secret"] as string;
 
     if (!merchantDetailsId) {
         return sendResponse(res, {
             statusCode: 400,
             success: false,
             message: "Merchant ID is required in headers (x-merchant-id)",
+        });
+    }
+
+    // Validate Webhook Secret
+    const merchant = await prisma.merchantDetails.findUnique({
+        where: { id: merchantDetailsId },
+        select: { id: true, webhookSecret: true }
+    });
+
+    if (!merchant) {
+        return sendResponse(res, {
+            statusCode: 404,
+            success: false,
+            message: "Merchant not found",
+        });
+    }
+
+    if (merchant.webhookSecret && merchant.webhookSecret !== providedSecret) {
+        return sendResponse(res, {
+            statusCode: 401,
+            success: false,
+            message: "Invalid Webhook Secret Key",
         });
     }
 
@@ -90,8 +113,57 @@ const retrySync = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const getWebhookConfig = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+
+    const merchant = await prisma.merchantDetails.findUnique({
+        where: { userId: user.userId },
+        select: { id: true, webhookSecret: true }
+    });
+
+    if (!merchant) {
+        throw new AppError(httpStatus.NOT_FOUND, "Merchant details not found");
+    }
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Webhook configuration fetched successfully",
+        data: {
+            merchantId: merchant.id,
+            webhookSecret: merchant.webhookSecret,
+            webhookUrl: `https://packnexa-backend-2.onrender.com/api/v1/external-order/wordpress/sync`
+        },
+    });
+});
+
+const generateWebhookSecret = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+
+    // Generate a random secret
+    const newSecret = `pk_ws_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`;
+
+    const merchant = await prisma.merchantDetails.update({
+        where: { userId: user.userId },
+        data: { webhookSecret: newSecret },
+        select: { id: true, webhookSecret: true }
+    });
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Webhook secret generated successfully",
+        data: {
+            merchantId: merchant.id,
+            webhookSecret: merchant.webhookSecret
+        },
+    });
+});
+
 export const ExternalOrderController = {
     syncWordPressOrder,
     getExternalLogs,
     retrySync,
+    getWebhookConfig,
+    generateWebhookSecret
 };

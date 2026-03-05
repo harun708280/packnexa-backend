@@ -34,15 +34,15 @@ const personalDetails = async (payload: any) => {
 
   const result = existingPersonalDetails
     ? await prisma.personalDetails.update({
-        where: { merchantDetailsId: merchantDetails.id },
-        data: personalData,
-      })
+      where: { merchantDetailsId: merchantDetails.id },
+      data: personalData,
+    })
     : await prisma.personalDetails.create({
-        data: {
-          merchantDetailsId: merchantDetails.id,
-          ...personalData,
-        },
-      });
+      data: {
+        merchantDetailsId: merchantDetails.id,
+        ...personalData,
+      },
+    });
 
   return result;
 };
@@ -113,15 +113,15 @@ const businessDetails = async (payload: any) => {
 
   return existing
     ? prisma.businessDetails.update({
-        where: { merchantDetailsId: merchantDetails.id },
-        data: businessData,
-      })
+      where: { merchantDetailsId: merchantDetails.id },
+      data: businessData,
+    })
     : prisma.businessDetails.create({
-        data: {
-          merchantDetailsId: merchantDetails.id,
-          ...businessData,
-        },
-      });
+      data: {
+        merchantDetailsId: merchantDetails.id,
+        ...businessData,
+      },
+    });
 };
 
 const getBusinessDetails = async (userId: string) => {
@@ -175,15 +175,15 @@ const documents = async (payload: any) => {
 
   return existing
     ? prisma.documents.update({
-        where: { merchantDetailsId: merchantDetails.id },
-        data: docData,
-      })
+      where: { merchantDetailsId: merchantDetails.id },
+      data: docData,
+    })
     : prisma.documents.create({
-        data: {
-          merchantDetailsId: merchantDetails.id,
-          ...docData,
-        },
-      });
+      data: {
+        merchantDetailsId: merchantDetails.id,
+        ...docData,
+      },
+    });
 };
 
 const getDocuments = async (userId: string) => {
@@ -470,6 +470,98 @@ const getOnboardingConfig = async () => {
   };
 };
 
+const getDashboardStats = async (userId: string) => {
+  const merchantDetails = await prisma.merchantDetails.findUnique({
+    where: { userId },
+  });
+
+  if (!merchantDetails) {
+    throw new Error("Merchant not found");
+  }
+
+  const merchantId = merchantDetails.id;
+
+  // 1. Total Orders
+  const totalOrders = await prisma.order.count({
+    where: { merchantDetailsId: merchantId },
+  });
+
+  // 2. Total Products
+  const totalProducts = await prisma.product.count({
+    where: { merchantDetailsId: merchantId },
+  });
+
+  // 3. Stock Value
+  const variants = await prisma.productVariant.findMany({
+    where: { merchantDetailsId: merchantId },
+    include: { pricing: true },
+  });
+
+  const stockValue = variants.reduce((acc, curr) => {
+    return acc + curr.quantity * (curr.pricing?.salePrice || 0);
+  }, 0);
+
+  // 4. Total Sales
+  const totalSalesData = await prisma.order.aggregate({
+    where: {
+      merchantDetailsId: merchantId,
+      status: "DELIVERED",
+    },
+    _sum: { totalPayable: true },
+  });
+  const totalSales = totalSalesData._sum.totalPayable || 0;
+
+  // 5. Order Fulfillment Breakdown
+  const fulfillment = await prisma.order.groupBy({
+    by: ["status"],
+    where: { merchantDetailsId: merchantId },
+    _count: { id: true },
+  });
+
+  // 6. Sales Trend (Last 7 Days)
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  const salesTrend = await Promise.all(
+    last7Days.map(async (date) => {
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      const dailyTotal = await prisma.order.aggregate({
+        where: {
+          merchantDetailsId: merchantId,
+          createdAt: {
+            gte: date,
+            lt: nextDate,
+          },
+        },
+        _sum: { totalPayable: true },
+      });
+
+      return {
+        name: date.toLocaleDateString("en-US", { weekday: "short" }),
+        value: dailyTotal._sum.totalPayable || 0,
+      };
+    })
+  );
+
+  return {
+    totalOrders,
+    totalProducts,
+    stockValue,
+    totalSales,
+    fulfillment: fulfillment.map((f) => ({
+      status: f.status,
+      count: f._count.id,
+    })),
+    salesTrend,
+  };
+};
+
 export const MerchantService = {
   personalDetails,
   getPersonalDetails,
@@ -481,6 +573,7 @@ export const MerchantService = {
   getPayments,
   completeOnboarding,
   getOnboardingConfig,
+  getDashboardStats,
 };
 
 // export const MerchantService1 = {

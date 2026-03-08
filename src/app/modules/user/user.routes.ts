@@ -15,5 +15,6 @@ router.post(
 );
 
 router.get("/me", authMiddleware, UserController.me);
+router.patch("/update-profile", authMiddleware, UserController.updateUser);
 
 export const userRoutes = router;

@@ -5,6 +5,7 @@ import catchAsync from "../../shared/catchAsync";
 import sendResponse from "../../shared/sendResponse";
 import { AuthService } from "./auth.service";
 import {
+  ChangePasswordInput,
   EmailInput,
   LoginInput,
   ResetPasswordInput,
@@ -14,10 +15,15 @@ import {
 const login = catchAsync(
   async (req: Request<{}, {}, LoginInput>, res: Response) => {
     const { email, password } = req.body;
+    const clientInfo = {
+      userAgent: req.headers["user-agent"],
+      ipAddress: req.ip as string,
+    };
 
     const { accessToken, refreshToken, user } = await AuthService.login(
       email,
-      password
+      password,
+      clientInfo
     );
 
     const isProduction = envVariables.NODE_ENV === "production";
@@ -50,10 +56,15 @@ const login = catchAsync(
 const verifyOtp = catchAsync(
   async (req: Request<{}, {}, VerifyOtpInput>, res: Response) => {
     const { email, otp } = req.body;
+    const clientInfo = {
+      userAgent: req.headers["user-agent"],
+      ipAddress: req.ip as string,
+    };
 
     const { accessToken, refreshToken, user } = await AuthService.verifyOtp(
       email,
-      otp
+      otp,
+      clientInfo
     );
 
     const isProduction = envVariables.NODE_ENV === "production";
@@ -131,6 +142,51 @@ const resetPassword = catchAsync(
   }
 );
 
+const getMySessions = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.getMySessions(req.user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Sessions fetched successfully",
+    data: result,
+  });
+});
+
+const logoutFromSession = catchAsync(async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  await AuthService.logoutFromSession(sessionId, req.user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Logged out from session successfully",
+  });
+});
+
+const logoutOtherSessions = catchAsync(async (req: Request, res: Response) => {
+  await AuthService.logoutOtherSessions(req.user.sessionId, req.user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Logged out from other sessions successfully",
+  });
+});
+
+const changePassword = catchAsync(
+  async (req: Request<{}, {}, ChangePasswordInput>, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+    const result = await AuthService.changePassword(req.user.userId, {
+      oldPassword,
+      newPassword,
+    });
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: result.message,
+    });
+  }
+);
+
 export const AuthController = {
   login,
   verifyOtp,
@@ -138,4 +194,8 @@ export const AuthController = {
   logout,
   forgetPassword,
   resetPassword,
+  changePassword,
+  getMySessions,
+  logoutFromSession,
+  logoutOtherSessions,
 };

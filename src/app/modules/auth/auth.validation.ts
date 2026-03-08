@@ -57,3 +57,26 @@ export const resetPasswordSchema = z
   .strict();
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    oldPassword: z.string().min(8, "Old password must be at least 8 characters"),
+    newPassword: z
+      .string()
+      .min(8, "New password must be at least 8 characters")
+      .refine((val) => /[A-Z]/.test(val), {
+        message: "Password must contain at least one uppercase letter",
+      })
+      .refine((val) => /[a-z]/.test(val), {
+        message: "Password must contain at least one lowercase letter",
+      })
+      .refine((val) => /\d/.test(val), {
+        message: "Password must contain at least one number",
+      })
+      .refine((val) => /[@$!%*?&#^()[\]{}_\-]/.test(val), {
+        message: "Password must contain at least one special character",
+      }),
+  })
+  .strict();
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

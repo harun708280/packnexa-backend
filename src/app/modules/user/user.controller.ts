@@ -21,4 +21,16 @@ const me = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, { statusCode: 200, success: true, data: user });
 });
 
-export const UserController = { createUser, me };
+const updateUser = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId;
+  const result = await UserService.updateUser(userId, req.body);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Profile updated successfully",
+    data: result,
+  });
+});
+
+export const UserController = { createUser, me, updateUser };

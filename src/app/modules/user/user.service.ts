@@ -61,7 +61,18 @@ const me = async (userId: string) => {
   return safeUser;
 };
 
+const updateUser = async (userId: string, data: Partial<CreateUserData>) => {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data,
+  });
+
+  const { password, otp, otpExpires, otpAttempts, ...safeUser } = user;
+  return safeUser;
+};
+
 export const UserService = {
   createUser,
   me,
+  updateUser,
 };

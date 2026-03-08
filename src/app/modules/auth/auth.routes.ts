@@ -8,6 +8,7 @@ import {
   loginSchema,
   resetPasswordSchema,
   verifyOtpSchema,
+  changePasswordSchema,
 } from "./auth.validation";
 
 export const router = express.Router();
@@ -51,6 +52,25 @@ router.post(
   authLimiter,
   validateRequest(resetPasswordSchema),
   AuthController.resetPassword
+);
+
+router.post(
+  "/change-password",
+  authMiddleware,
+  validateRequest(changePasswordSchema),
+  AuthController.changePassword
+);
+
+router.get("/sessions", authMiddleware, AuthController.getMySessions);
+router.delete(
+  "/sessions/:sessionId",
+  authMiddleware,
+  AuthController.logoutFromSession
+);
+router.post(
+  "/logout-other-sessions",
+  authMiddleware,
+  AuthController.logoutOtherSessions
 );
 
 export const authRoutes = router;

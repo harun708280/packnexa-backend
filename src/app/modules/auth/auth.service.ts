@@ -12,7 +12,11 @@ export const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const login = async (email: string, password: string) => {
+const login = async (
+  email: string,
+  password: string,
+  clientInfo?: { userAgent?: string; ipAddress?: string }
+) => {
   const user = await prisma.user.findUnique({ where: { email } });
 
   if (!user) throw new AppError(400, "Invalid email address");
@@ -21,22 +25,32 @@ const login = async (email: string, password: string) => {
 
   if (!isMatch) throw new AppError(400, "Invalid credentials");
 
-  const accessToken = jwtHelper.generateToken(
-    {
+  // Simple device parsing
+  const device = clientInfo?.userAgent || "Unknown Device";
+
+  const session = await prisma.userSession.create({
+    data: {
       userId: user.id,
-      email: user.email,
-      role: user.role,
+      device: device,
+      ipAddress: clientInfo?.ipAddress,
     },
+  });
+
+  const payload = {
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    sessionId: session.id,
+  };
+
+  const accessToken = jwtHelper.generateToken(
+    payload,
     envVariables.JWT_ACCESS_SECRET,
     envVariables.JWT_ACCESS_EXPIRES
   );
 
   const refreshToken = jwtHelper.generateToken(
-    {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    },
+    payload,
     envVariables.JWT_REFRESH_SECRET,
     envVariables.JWT_REFRESH_EXPIRES
   );
@@ -48,7 +62,11 @@ const login = async (email: string, password: string) => {
   };
 };
 
-const verifyOtp = async (email: string, otp: string) => {
+const verifyOtp = async (
+  email: string,
+  otp: string,
+  clientInfo?: { userAgent?: string; ipAddress?: string }
+) => {
   const user = await prisma.user.findUnique({ where: { email } });
 
   if (!user || !user.otp || !user.otpExpires) {
@@ -85,10 +103,21 @@ const verifyOtp = async (email: string, otp: string) => {
     throw new AppError(401, "Invalid OTP");
   }
 
+  const device = clientInfo?.userAgent || "Unknown Device";
+
+  const session = await prisma.userSession.create({
+    data: {
+      userId: user.id,
+      device: device,
+      ipAddress: clientInfo?.ipAddress,
+    },
+  });
+
   const payload = {
     userId: user.id,
     email: user.email,
     role: user.role,
+    sessionId: session.id,
   };
 
   const accessToken = jwtHelper.generateToken(
@@ -235,10 +264,68 @@ const resetPassword = async (
   return { message: "Password updated successfully" };
 };
 
+const getMySessions = async (userId: string) => {
+  return await prisma.userSession.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+};
+
+const logoutFromSession = async (sessionId: string, userId: string) => {
+  return await prisma.userSession.deleteMany({
+    where: { id: sessionId, userId },
+  });
+};
+
+const logoutOtherSessions = async (currentSessionId: string, userId: string) => {
+  return await prisma.userSession.deleteMany({
+    where: {
+      userId,
+      NOT: { id: currentSessionId },
+    },
+  });
+};
+
+const changePassword = async (
+  userId: string,
+  payload: { oldPassword: string; newPassword: string }
+) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new AppError(404, "User not found");
+  }
+
+  const isPasswordValid = await bcrypt.compare(
+    payload.oldPassword,
+    user.password
+  );
+
+  if (!isPasswordValid) {
+    throw new AppError(401, "Invalid old password");
+  }
+
+  const hashedPassword = await bcrypt.hash(
+    payload.newPassword,
+    envVariables.BCRYPT_SALT_ROUND
+  );
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashedPassword },
+  });
+
+  return { message: "Password changed successfully" };
+};
+
 export const AuthService = {
   login,
   verifyOtp,
   resendOtp,
   forgetPassword,
   resetPassword,
+  changePassword,
+  getMySessions,
+  logoutFromSession,
+  logoutOtherSessions,
 };

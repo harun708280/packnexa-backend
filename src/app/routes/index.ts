@@ -9,6 +9,7 @@ import { orderRoutes } from "../modules/order/order.route";
 
 import { ExternalOrderRoutes } from "../modules/externalOrder/externalOrder.routes";
 import { uploadRoutes } from "../modules/upload/upload.route";
+import { ReturnRoutes } from "../modules/return/return.route";
 
 const router = express.Router();
 
@@ -48,6 +49,10 @@ const moduleRoutes = [
   {
     path: "/external-order",
     route: ExternalOrderRoutes,
+  },
+  {
+    path: "/returns",
+    route: ReturnRoutes,
   },
 ];
 

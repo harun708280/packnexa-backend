@@ -49,10 +49,19 @@ export const merchantDocumentsSchema = z.object({
 export type MerchantDocumentsInput = z.infer<typeof merchantDocumentsSchema>;
 
 export const merchantPaymentsSchema = z.object({
-  usedMethod: z.string().min(2, "Payment method is required"),
-  paymentNumber: z.string().min(11, "Payment number is required"),
-  bankDetails: z.string().min(2, "Bank details is required"),
+  paymentMethod: z.string().optional(),
+  bankName: z.string().optional(),
+  branchName: z.string().optional(),
+  accountName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  routingNumber: z.string().optional(),
+  mobileBankingMethod: z.string().optional(),
+  mobileNumber: z.string().optional(),
 
+  // Legacy fields made optional
+  usedMethod: z.string().optional(),
+  paymentNumber: z.string().optional(),
+  bankDetails: z.string().optional(),
 });
 
 export type MerchantPaymentsInput = z.infer<typeof merchantPaymentsSchema>;

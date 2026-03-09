@@ -321,19 +321,24 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         throw new Error(`Invalid transition. Only PACKED orders can be marked as SHIPPED. Current status: ${existingOrder.status}`);
     }
 
-    // Prevent manual DELIVERED/RETURNED for Steadfast orders
+    // [User Request] Block cancellation for SHIPPED orders
+    if (payload.status === OrderStatus.CANCELLED && existingOrder.status === OrderStatus.SHIPPED) {
+        throw new Error(`Order ${existingOrder.orderNumber} is already SHIPPED and cannot be cancelled. Please use RETURNED if the customer rejects it.`);
+    }
+
+    // Prevent manual DELIVERED for Steadfast orders (Allow RETURNED manually per user request)
     const isSteadfastOrder = existingOrder.preferredCourier?.toLowerCase().includes("steadfast") ||
         existingOrder.preferredCourier?.toLowerCase().includes("system automatic") ||
         !existingOrder.preferredCourier;
 
-    if (isSteadfastOrder && existingOrder.trackingNumber && ([OrderStatus.DELIVERED, OrderStatus.RETURNED] as OrderStatus[]).includes(payload.status)) {
+    if (isSteadfastOrder && existingOrder.trackingNumber && payload.status === OrderStatus.DELIVERED) {
         throw new Error(`Manual status update to ${payload.status} is restricted for Steadfast orders. Status will sync automatically from the courier.`);
     }
 
     const result = await prisma.$transaction(async (tx) => {
-        // 1. Handle Inventory Restocking for CANCELLED or RETURNED
+        // 1. Handle Inventory Restocking for CANCELLED (RETURNED is now handled in ReturnService)
         const isCurrentlyActive = !['CANCELLED', 'RETURNED'].includes(existingOrder.status);
-        const willBeInactive = ['CANCELLED', 'RETURNED'].includes(payload.status as any);
+        const willBeInactive = ['CANCELLED'].includes(payload.status as any);
 
         if (isCurrentlyActive && willBeInactive) {
             console.log(`[DEBUG] Restocking inventory for order ${existingOrder.orderNumber} as it moves to ${payload.status}`);
@@ -385,13 +390,41 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         }
 
         // 3. Update the Order
-        return tx.order.update({
+        const updatedOrder = await tx.order.update({
             where: { id: orderId },
             data: {
                 status: payload.status,
                 adminNote: payload.adminNote || existingOrder.adminNote,
             },
         });
+
+        // 4. Auto-create ReturnOrder if status is RETURNED
+        if (payload.status === OrderStatus.RETURNED) {
+            const existingReturn = await tx.returnOrder.findUnique({
+                where: { orderId }
+            });
+
+            if (!existingReturn) {
+                console.log(`[DEBUG] Auto-creating ReturnOrder for order ${existingOrder.orderNumber}`);
+                await tx.returnOrder.create({
+                    data: {
+                        orderId,
+                        merchantDetailsId: existingOrder.merchantDetailsId,
+                        status: "PENDING", // Start as PENDING for admin review
+                        reason: payload.adminNote || "Marked as returned by admin",
+                        backToStock: false,
+                        items: {
+                            create: existingOrder.items.map(item => ({
+                                variantId: item.variantId,
+                                quantity: item.quantity,
+                            }))
+                        }
+                    }
+                });
+            }
+        }
+
+        return updatedOrder;
     });
 
     // 4. Handle External Integrations (Steadfast)

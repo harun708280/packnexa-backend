@@ -12,6 +12,7 @@ model MerchantDetails {
   personalDetails   PersonalDetails?
   externalOrderLogs ExternalOrderLog[]
   orders            Order[]
+  returnOrders      ReturnOrder[]
   products          Product[]
   webhookSecret     String?            @unique
 }
@@ -77,9 +78,22 @@ model Payments {
   id                  String          @id @default(uuid())
   merchantDetailsId   String          @unique
   status              PaymentStatus?  @default(PENDING)
-  usedMethod          String
-  paymentNumber       String
-  bankDetails         String
+  
+  // New Payment Fields
+  paymentMethod       String?
+  bankName            String?
+  branchName          String?
+  accountName         String?
+  accountNumber       String?
+  routingNumber       String?
+  mobileBankingMethod String?
+  mobileNumber        String?
+
+  // Legacy fields made optional
+  usedMethod          String?
+  paymentNumber       String?
+  bankDetails         String?
+
   isVerifiedPhaseFour Boolean         @default(false)
   createdAt           DateTime        @default(now())
   merchantDetails     MerchantDetails @relation(fields: [merchantDetailsId], references: [id])

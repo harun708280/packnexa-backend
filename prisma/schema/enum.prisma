@@ -95,3 +95,9 @@ enum OrderStatus {
   CANCELLED
   RETURNED
 }
+
+enum ReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

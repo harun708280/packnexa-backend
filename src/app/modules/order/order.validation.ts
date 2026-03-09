@@ -9,13 +9,15 @@ const createOrderItemSchema = z.object({
 const createOrderSchema = z.object({
     customerName: z.string().min(1, "Customer name is required"),
     customerPhone: z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)"),
-    alternativePhone: z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)").optional().nullable(),
+    alternativePhone: z.string().optional().nullable().transform(val => val === "" ? null : val).pipe(
+        z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)").optional().nullable()
+    ),
     customerEmail: z.string().email().optional().nullable(),
     deliveryAddress: z.string().min(1, "Delivery address is required"),
     district: z.string().min(1, "District is required"),
     area: z.string().min(1, "Area is required"),
     zipCode: z.string().optional().nullable(),
-    orderSource: z.enum(["FACEBOOK", "WHATSAPP", "TIKTOK", "INSTAGRAM", "MANUAL"]).optional(),
+    orderSource: z.enum(["FACEBOOK", "WHATSAPP", "TIKTOK", "INSTAGRAM", "MANUAL", "WORDPRESS"]).optional(),
     paymentMethod: z.string().optional(),
     preferredCourier: z.string().optional(),
     isPreBooking: z.boolean().optional(),
@@ -27,7 +29,7 @@ const createOrderSchema = z.object({
 });
 
 const updateOrderStatusSchema = z.object({
-    status: z.enum(["PENDING", "APPROVED", "PACKED", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED"]),
+    status: z.enum(["PENDING", "APPROVED", "PACKED", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"]),
     adminNote: z.string().optional().nullable(),
 });
 

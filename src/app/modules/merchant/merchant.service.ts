@@ -1,4 +1,5 @@
 import { prisma } from "../../shared/prisma";
+import { SteadfastService } from "../order/steadfast-service";
 
 const personalDetails = async (payload: any) => {
   const {
@@ -222,7 +223,7 @@ const completeOnboarding = async (userId: string) => {
 };
 
 const payments = async (payload: any) => {
-  const { userId, id, ...rest } = payload;
+  const { userId, id, merchantDetailsId, createdAt, updatedAt, ...rest } = payload;
 
   const merchantDetails = await prisma.merchantDetails.findUnique({
     where: { userId },
@@ -447,22 +448,54 @@ const getOnboardingConfig = async () => {
         title: "Payment & Final Submission",
         fields: [
           {
-            name: "usedMethod",
+            name: "paymentMethod",
             label: "Payment Method",
-            type: "text",
+            type: "select",
+            options: ["BANK_TRANSFER", "MOBILE_BANKING"],
             required: true,
           },
           {
-            name: "paymentNumber",
-            label: "Payment Number",
+            name: "bankName",
+            label: "Bank Name",
             type: "text",
-            required: true,
+            required: false, // Conditional
           },
           {
-            name: "bankDetails",
-            label: "Bank Details",
-            type: "textarea",
-            required: true,
+            name: "branchName",
+            label: "Branch Name",
+            type: "text",
+            required: false, // Conditional
+          },
+          {
+            name: "accountName",
+            label: "Account Name",
+            type: "text",
+            required: false, // Conditional
+          },
+          {
+            name: "accountNumber",
+            label: "Account Number",
+            type: "text",
+            required: false, // Conditional
+          },
+          {
+            name: "routingNumber",
+            label: "Routing Number",
+            type: "text",
+            required: false, // Conditional
+          },
+          {
+            name: "mobileBankingMethod",
+            label: "Mobile Banking Method",
+            type: "select",
+            options: ["BKASH", "NAGAD", "ROCKET", "UPAY"],
+            required: false, // Conditional
+          },
+          {
+            name: "mobileNumber",
+            label: "Mobile Number",
+            type: "text",
+            required: false, // Conditional
           },
         ],
       },
@@ -549,11 +582,14 @@ const getDashboardStats = async (userId: string) => {
     })
   );
 
+  const steadfastBalance = await SteadfastService.getBalance();
+
   return {
     totalOrders,
     totalProducts,
     stockValue,
     totalSales,
+    steadfastBalance: steadfastBalance || 0,
     fulfillment: fulfillment.map((f) => ({
       status: f.status,
       count: f._count.id,

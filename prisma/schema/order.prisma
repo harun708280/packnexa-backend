@@ -27,6 +27,7 @@ model Order {
   alternativePhone  String?
   items             OrderItem[]
   merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
+  returnOrder       ReturnOrder?
 
   @@index([merchantDetailsId])
   @@index([status])

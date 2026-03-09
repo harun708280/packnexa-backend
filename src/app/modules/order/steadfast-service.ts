@@ -83,6 +83,39 @@ const createOrder = async (order: Order): Promise<SteadfastOrderResponse | null>
     }
 };
 
+const getBalance = async (): Promise<number | null> => {
+    const apiKey = (config.steadfast?.api_key || process.env.STEADFAST_API_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
+    const secretKey = (config.steadfast?.secret_key || process.env.STEADFAST_SECRET_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
+
+    if (!apiKey || !secretKey) {
+        return null;
+    }
+
+    try {
+        const response = await fetch(`${STEADFAST_BASE_URL}/get_balance`, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                "Api-Key": apiKey,
+                "Secret-Key": secretKey,
+            },
+        });
+
+        const text = await response.text();
+        try {
+            const result = JSON.parse(text);
+            if (result.status === 200) {
+                return result.current_balance;
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    } catch (error) {
+        return null;
+    }
+};
+
 const trackOrder = async (invoice: string): Promise<SteadfastStatusResponse | null> => {
     const apiKey = (config.steadfast?.api_key || process.env.STEADFAST_API_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
     const secretKey = (config.steadfast?.secret_key || process.env.STEADFAST_SECRET_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
@@ -118,4 +151,5 @@ const trackOrder = async (invoice: string): Promise<SteadfastStatusResponse | nu
 export const SteadfastService = {
     createOrder,
     trackOrder,
+    getBalance,
 };

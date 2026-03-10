@@ -55,6 +55,7 @@ model ProductVariant {
   batch                 Batch?
   inventoryTransactions InventoryTransaction[]
   stockControl          StockControl?
+  stockAdjustments      StockAdjustment[]
   location              VariantLocation?
   pricing               VariantPricing?
   orderItems            OrderItem[]
@@ -135,4 +136,21 @@ model WarehouseLog {
   location  String?
   createdAt DateTime @default(now())
   product   Product  @relation(fields: [productId], references: [id])
+}
+
+model StockAdjustment {
+  id                String           @id @default(uuid())
+  variantId         String
+  merchantDetailsId String
+  previousQuantity  Int
+  adjustmentQuantity Int
+  status            AdjustmentStatus @default(PENDING)
+  note              String?
+  rejectionReason   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  variant           ProductVariant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  merchantDetails   MerchantDetails  @relation(fields: [merchantDetailsId], references: [id])
+
+  @@map("stock_adjustments")
 }

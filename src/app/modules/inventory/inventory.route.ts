@@ -10,15 +10,25 @@ import {
   warehouseRejectProduct,
   storeProduct,
   getWarehouseLogs,
+  requestStockAdjustment,
+  listStockAdjustments,
+  approveStockAdjustment,
+  rejectStockAdjustment,
+  getProduct,
 } from "./inventory.controller";
 
 const router = express.Router();
+
+// Stock Adjustment Routes (Move up to prevent conflict with :id)
+router.post("/stock-adjustment", authMiddleware, requestStockAdjustment);
+router.get("/stock-adjustment", authMiddleware, listStockAdjustments);
 
 // Merchant routes
 router.post("/", authMiddleware, addProduct);
 router.patch("/:id", authMiddleware, editProduct);
 router.delete("/:id", authMiddleware, deleteProduct);
 router.get("/", authMiddleware, listProducts);
+router.get("/:id", authMiddleware, getProduct);
 
 // Warehouse/Admin routes
 router.get("/warehouse/pending", authMiddleware, adminMiddleware, listProducts);
@@ -26,4 +36,8 @@ router.post("/warehouse/:id/approve", authMiddleware, adminMiddleware, warehouse
 router.post("/warehouse/:id/reject", authMiddleware, adminMiddleware, warehouseRejectProduct);
 router.patch("/warehouse/:id/store", authMiddleware, adminMiddleware, storeProduct);
 router.get("/warehouse/logs/:productId", authMiddleware, adminMiddleware, getWarehouseLogs);
+
+router.patch("/stock-adjustment/:id/approve", authMiddleware, adminMiddleware, approveStockAdjustment);
+router.patch("/stock-adjustment/:id/reject", authMiddleware, adminMiddleware, rejectStockAdjustment);
+
 export const inventoryRoutes = router;

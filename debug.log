@@ -1,0 +1,14 @@
+[2026-03-10T18:02:21.331Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:02:21.922Z] Found 3 adjustments
+[2026-03-10T18:02:54.756Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:02:55.414Z] Found 2 adjustments
+[2026-03-10T18:04:53.732Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:04:54.330Z] Found 1 adjustments
+[2026-03-10T18:05:13.660Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:05:14.273Z] Found 1 adjustments
+[2026-03-10T18:05:27.404Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:05:27.464Z] Found 0 adjustments
+[2026-03-10T18:05:48.027Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:05:48.346Z] Found 1 adjustments
+[2026-03-10T18:06:02.201Z] Admin Check: userId=65a6e1bf-aa79-43c0-9e97-00867457f3cd, role=ADMIN, isAdmin=true, status=PENDING
+[2026-03-10T18:06:02.268Z] Found 0 adjustments

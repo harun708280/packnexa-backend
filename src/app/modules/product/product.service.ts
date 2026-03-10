@@ -42,14 +42,8 @@ const createProduct = async (userId: string, payload: any) => {
     });
 
 
-    const baseCount = await tx.productVariant.count();
-    let variantIndex = 0;
-
     for (const variant of variants) {
-      const nextNumber = baseCount + variantIndex + 1;
-      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const sku = `NEXA-${nextNumber}${randomSuffix}`;
-      variantIndex++;
+      const sku = await generateUniqueSKU(tx);
 
       const { purchasePrice, salePrice, imageUrl, pricing, location, stockControl, ...rest } = variant;
 
@@ -421,9 +415,7 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
         } else {
           console.log('Creating new variant...');
 
-          const baseCount = await tx.productVariant.count();
-          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-          const sku = variant.sku || `NEXA-${baseCount + 1}${randomSuffix}`;
+          const sku = variant.sku || await generateUniqueSKU(tx);
 
           await tx.productVariant.create({
             data: {

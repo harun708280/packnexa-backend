@@ -101,3 +101,9 @@ enum ReturnStatus {
   APPROVED
   REJECTED
 }
+
+enum AdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

@@ -32,12 +32,11 @@ interface SteadfastStatusResponse {
     tracking_code?: string;
 }
 
-const createOrder = async (order: Order): Promise<SteadfastOrderResponse | null> => {
-    const apiKey = (config.steadfast?.api_key || process.env.STEADFAST_API_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
-    const secretKey = (config.steadfast?.secret_key || process.env.STEADFAST_SECRET_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
+const createOrder = async (order: Order, merchantCredentials?: { apiKey?: string | null, secretKey?: string | null }): Promise<SteadfastOrderResponse | null> => {
+    const apiKey = merchantCredentials?.apiKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
+    const secretKey = merchantCredentials?.secretKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
 
     if (!apiKey || !secretKey) {
-        console.error("Steadfast API Key or Secret Key is missing in environment variables.");
         return null;
     }
 
@@ -83,9 +82,9 @@ const createOrder = async (order: Order): Promise<SteadfastOrderResponse | null>
     }
 };
 
-const getBalance = async (): Promise<number | null> => {
-    const apiKey = (config.steadfast?.api_key || process.env.STEADFAST_API_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
-    const secretKey = (config.steadfast?.secret_key || process.env.STEADFAST_SECRET_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
+const getBalance = async (merchantCredentials?: { apiKey?: string | null, secretKey?: string | null }): Promise<number | null> => {
+    const apiKey = merchantCredentials?.apiKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
+    const secretKey = merchantCredentials?.secretKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
 
     if (!apiKey || !secretKey) {
         return null;
@@ -116,9 +115,9 @@ const getBalance = async (): Promise<number | null> => {
     }
 };
 
-const trackOrder = async (invoice: string): Promise<SteadfastStatusResponse | null> => {
-    const apiKey = (config.steadfast?.api_key || process.env.STEADFAST_API_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
-    const secretKey = (config.steadfast?.secret_key || process.env.STEADFAST_SECRET_KEY || "").toString().trim().replace(/^["'](.+)["']$/, '$1');
+const trackOrder = async (invoice: string, merchantCredentials?: { apiKey?: string | null, secretKey?: string | null }): Promise<SteadfastStatusResponse | null> => {
+    const apiKey = merchantCredentials?.apiKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
+    const secretKey = merchantCredentials?.secretKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
 
     if (!apiKey || !secretKey) {
         return null;

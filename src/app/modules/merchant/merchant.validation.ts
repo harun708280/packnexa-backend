@@ -65,3 +65,12 @@ export const merchantPaymentsSchema = z.object({
 });
 
 export type MerchantPaymentsInput = z.infer<typeof merchantPaymentsSchema>;
+
+export const merchantSteadfastConfigSchema = z.object({
+  apiKey: z.string().min(1, "Steadfast API Key is required"),
+  secretKey: z.string().min(1, "Steadfast Secret Key is required"),
+});
+
+export type MerchantSteadfastConfigInput = z.infer<
+  typeof merchantSteadfastConfigSchema
+>;

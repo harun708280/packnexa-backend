@@ -2,7 +2,9 @@ import express from "express";
 import { fileUploader } from "../../helper/fileUploader";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import checkMerchantNotSubmitted from "../../middlewares/checkMerchantNotSubmitted";
+import validateRequest from "../../middlewares/validateRequest";
 import { MerchantController } from "./merchant.controller";
+import { merchantSteadfastConfigSchema } from "./merchant.validation";
 
 const router = express.Router();
 
@@ -80,5 +82,18 @@ router.get(
 );
 
 
+
+router.get(
+  "/steadfast-config",
+  authMiddleware,
+  MerchantController.getSteadfastConfig,
+);
+
+router.patch(
+  "/steadfast-config",
+  authMiddleware,
+  validateRequest(merchantSteadfastConfigSchema),
+  MerchantController.updateSteadfastConfig,
+);
 
 export const merchantRoutes = router;

@@ -25,7 +25,7 @@ const login = async (
 
   if (!isMatch) throw new AppError(400, "Invalid credentials");
 
-  // Simple device parsing
+
   const device = clientInfo?.userAgent || "Unknown Device";
 
   const session = await prisma.userSession.create({

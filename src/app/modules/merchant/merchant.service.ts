@@ -560,7 +560,7 @@ const getDashboardStats = async (userId: string) => {
   });
 
   const salesTrend = await Promise.all(
-    last7Days.map(async (date) => {
+    last7Days.map(async (date: Date) => {
       const nextDate = new Date(date);
       nextDate.setDate(nextDate.getDate() + 1);
 
@@ -582,7 +582,96 @@ const getDashboardStats = async (userId: string) => {
     })
   );
 
-  const steadfastBalance = await SteadfastService.getBalance();
+  // 7. Top Customers
+  const orders = await prisma.order.findMany({
+    where: { merchantDetailsId: merchantId },
+    select: {
+      customerName: true,
+      customerEmail: true,
+      customerPhone: true,
+      totalPayable: true,
+    },
+  });
+
+  const customerMap = new Map<string, any>();
+  orders.forEach((order) => {
+    const identifier = order.customerEmail || order.customerPhone;
+    if (!customerMap.has(identifier)) {
+      customerMap.set(identifier, {
+        name: order.customerName,
+        email: order.customerEmail,
+        orderCount: 0,
+        totalSpent: 0,
+      });
+    }
+    const current = customerMap.get(identifier);
+    current.orderCount += 1;
+    current.totalSpent += order.totalPayable;
+  });
+
+  const topCustomers = Array.from(customerMap.values())
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, 10);
+
+  // 8. Top Products
+  const orderItems = await prisma.orderItem.findMany({
+    where: { order: { merchantDetailsId: merchantId } },
+    include: {
+      variant: {
+        include: {
+          product: true,
+        },
+      },
+    },
+  });
+
+  const productMap = new Map<string, any>();
+  orderItems.forEach((item) => {
+    const productName = item.variant?.product?.productName || "Unknown Product";
+    if (!productMap.has(productName)) {
+      productMap.set(productName, {
+        name: productName,
+        quantitySold: 0,
+        revenue: 0,
+      });
+    }
+    const current = productMap.get(productName);
+    current.quantitySold += item.quantity;
+    current.revenue += item.totalPrice;
+  });
+
+  const topProducts = Array.from(productMap.values())
+    .sort((a, b) => b.quantitySold - a.quantitySold)
+    .slice(0, 10);
+
+  // 9. Low Stock / Stock Out
+  const lowStockThreshold = 10;
+  const stockAlerts = await prisma.productVariant.findMany({
+    where: {
+      merchantDetailsId: merchantId,
+      quantity: { lte: 20 },
+    },
+    include: {
+      product: true,
+    },
+    orderBy: { quantity: "asc" },
+    take: 10,
+  });
+
+  const formattedStockAlerts = stockAlerts.map((v) => ({
+    productName: v.product?.productName,
+    variantName: v.variantName,
+    sku: v.sku,
+    quantity: v.quantity,
+    status: v.quantity === 0 ? "Out of Stock" : "Low Stock",
+  }));
+
+  const steadfastBalance = (merchantDetails.steadfastApiKey && merchantDetails.steadfastSecretKey)
+    ? await SteadfastService.getBalance({
+      apiKey: merchantDetails.steadfastApiKey,
+      secretKey: merchantDetails.steadfastSecretKey,
+    })
+    : 0;
 
   return {
     totalOrders,
@@ -595,7 +684,31 @@ const getDashboardStats = async (userId: string) => {
       count: f._count.id,
     })),
     salesTrend,
+    topCustomers,
+    topProducts,
+    stockAlerts: formattedStockAlerts,
   };
+};
+
+const updateSteadfastConfig = async (userId: string, payload: { apiKey: string, secretKey: string }) => {
+  return prisma.merchantDetails.update({
+    where: { userId },
+    data: {
+      steadfastApiKey: payload.apiKey,
+      steadfastSecretKey: payload.secretKey,
+    },
+  });
+};
+
+const getSteadfastConfig = async (userId: string) => {
+  const result = await prisma.merchantDetails.findUnique({
+    where: { userId },
+    select: {
+      steadfastApiKey: true,
+      steadfastSecretKey: true,
+    },
+  });
+  return result;
 };
 
 export const MerchantService = {
@@ -610,6 +723,8 @@ export const MerchantService = {
   completeOnboarding,
   getOnboardingConfig,
   getDashboardStats,
+  updateSteadfastConfig,
+  getSteadfastConfig,
 };
 
 // export const MerchantService1 = {

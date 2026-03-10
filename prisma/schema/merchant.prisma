@@ -16,6 +16,8 @@ model MerchantDetails {
   products          Product[]
   stockAdjustments  StockAdjustment[]
   webhookSecret     String?            @unique
+  steadfastApiKey   String?
+  steadfastSecretKey String?
 }
 
 model PersonalDetails {

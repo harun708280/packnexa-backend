@@ -39,6 +39,20 @@ router.get(
 );
 
 router.get(
+    "/customers",
+    authMiddleware,
+    requireRole(UserRole.MERCHANT),
+    OrderController.getMerchantCustomers
+);
+
+router.get(
+    "/customers/:identifier",
+    authMiddleware,
+    requireRole(UserRole.MERCHANT),
+    OrderController.getCustomerDetails
+);
+
+router.get(
     "/:id",
     authMiddleware,
     requireRole(UserRole.MERCHANT, UserRole.ADMIN),
@@ -65,6 +79,7 @@ router.get(
     authMiddleware,
     OrderController.trackOrder
 );
+
 
 router.delete(
     "/delete/:id",

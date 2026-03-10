@@ -185,6 +185,30 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateSteadfastConfig = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await MerchantService.updateSteadfastConfig(user.userId, req.body);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Steadfast configuration updated successfully",
+    data: result,
+  });
+});
+
+const getSteadfastConfig = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const result = await MerchantService.getSteadfastConfig(user.userId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Steadfast configuration fetched successfully",
+    data: result,
+  });
+});
+
 export const MerchantController = {
   personalDetails,
   getPersonalDetails,
@@ -197,11 +221,6 @@ export const MerchantController = {
   completeOnboarding,
   getOnboardingConfig,
   getDashboardStats,
-  // kkkkk
-  // applyMerchant,
-  // getAllMerchants,
-  // approveMerchant,
-  // rejectMerchant,
-  // getMyMerchantProfile,
-  // updateMyMerchantProfile,
+  updateSteadfastConfig,
+  getSteadfastConfig,
 };

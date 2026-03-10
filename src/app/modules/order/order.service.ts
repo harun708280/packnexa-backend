@@ -439,17 +439,29 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
     if (isTargetingShipped && isSteadfastCourier) {
         console.log(`[DEBUG] Triggering Steadfast API for order ${result.orderNumber}`);
         try {
-            const steadfastResponse = await SteadfastService.createOrder(result);
-            if (steadfastResponse && (steadfastResponse.status === 200 || steadfastResponse.status === 201) && steadfastResponse.consignment) {
-                await prisma.order.update({
-                    where: { id: orderId },
-                    data: {
-                        trackingNumber: steadfastResponse.consignment.tracking_code,
-                    },
+            const merchantKeys = await prisma.merchantDetails.findUnique({
+                where: { id: result.merchantDetailsId },
+                select: { steadfastApiKey: true, steadfastSecretKey: true }
+            });
+
+            if (merchantKeys?.steadfastApiKey && merchantKeys?.steadfastSecretKey) {
+                const steadfastResponse = await SteadfastService.createOrder(result, {
+                    apiKey: merchantKeys.steadfastApiKey,
+                    secretKey: merchantKeys.steadfastSecretKey
                 });
-                console.log(`Order ${result.orderNumber} successfully sent to Steadfast. Tracking: ${steadfastResponse.consignment.tracking_code}`);
+                if (steadfastResponse && (steadfastResponse.status === 200 || steadfastResponse.status === 201) && steadfastResponse.consignment) {
+                    await prisma.order.update({
+                        where: { id: orderId },
+                        data: {
+                            trackingNumber: steadfastResponse.consignment.tracking_code,
+                        },
+                    });
+                    console.log(`Order ${result.orderNumber} successfully sent to Steadfast. Tracking: ${steadfastResponse.consignment.tracking_code}`);
+                } else {
+                    console.warn(`Steadfast API returned error for order ${result.orderNumber}:`, steadfastResponse);
+                }
             } else {
-                console.warn(`Steadfast API returned error for order ${result.orderNumber}:`, steadfastResponse);
+                console.warn(`[SKIP] Order ${result.orderNumber} not sent to Steadfast: Merchant has no API keys configured.`);
             }
         } catch (error) {
             console.error(`Failed to send order ${result.orderNumber} to Steadfast:`, error);
@@ -705,7 +717,15 @@ const trackSteadfastOrder = async (orderId: string) => {
         return { message: "This order is not associated with Steadfast Courier" };
     }
 
-    const steadfastResult = await SteadfastService.trackOrder(order.orderNumber);
+    const merchantKeys = await prisma.merchantDetails.findUnique({
+        where: { id: order.merchantDetailsId },
+        select: { steadfastApiKey: true, steadfastSecretKey: true }
+    });
+
+    const steadfastResult = await SteadfastService.trackOrder(order.orderNumber, {
+        apiKey: merchantKeys?.steadfastApiKey,
+        secretKey: merchantKeys?.steadfastSecretKey
+    });
 
     if (steadfastResult && steadfastResult.status === 200 && steadfastResult.delivery_status) {
         const sStatus = steadfastResult.delivery_status.toLowerCase();
@@ -727,6 +747,148 @@ const trackSteadfastOrder = async (orderId: string) => {
 };
 
 
+const getMerchantCustomers = async (userId: string, query: { searchTerm?: string; page?: string; limit?: string } = {}) => {
+    const merchantDetails = await prisma.merchantDetails.findUnique({
+        where: { userId },
+    });
+
+    if (!merchantDetails) {
+        throw new Error("Merchant details not found");
+    }
+
+    const { searchTerm, page = "1", limit = "10" } = query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    // Prisma doesn't support complex grouping with pagination directly easily for this case
+    // We will aggregate manually or use a Raw query if performance is an issue.
+    // Given the current structure, we can group by email/phone.
+
+    const where: any = { merchantDetailsId: merchantDetails.id };
+    if (searchTerm) {
+        where.OR = [
+            { customerName: { contains: searchTerm, mode: "insensitive" } },
+            { customerEmail: { contains: searchTerm, mode: "insensitive" } },
+            { customerPhone: { contains: searchTerm, mode: "insensitive" } },
+        ];
+    }
+
+    // Get all orders for this merchant to aggregate
+    // Note: For very large datasets, this should be optimized.
+    const allOrders = await prisma.order.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+    });
+
+    const customerMap = new Map<string, any>();
+
+    allOrders.forEach(order => {
+        const identifier = order.customerEmail || order.customerPhone;
+        if (!customerMap.has(identifier)) {
+            customerMap.set(identifier, {
+                name: order.customerName,
+                email: order.customerEmail,
+                phone: order.customerPhone,
+                city: order.district, // Using district as city matching frontend
+                totalOrders: 0,
+                totalSpent: 0,
+                lastOrderDate: order.createdAt
+            });
+        }
+
+        const current = customerMap.get(identifier);
+        current.totalOrders += 1;
+        current.totalSpent += order.totalPayable;
+    });
+
+    const customers = Array.from(customerMap.values());
+    const total = customers.length;
+    const paginatedCustomers = customers.slice(skip, skip + take);
+
+    return {
+        meta: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
+        },
+        data: paginatedCustomers,
+    };
+};
+
+const getCustomerDetails = async (userId: string, identifier: string) => {
+    const merchantDetails = await prisma.merchantDetails.findUnique({
+        where: { userId },
+    });
+
+    if (!merchantDetails) {
+        throw new Error("Merchant details not found");
+    }
+
+    // Check if identifier is email or phone
+    const isEmail = identifier.includes("@");
+
+    const orders = await prisma.order.findMany({
+        where: {
+            merchantDetailsId: merchantDetails.id,
+            OR: [
+                { customerEmail: identifier },
+                { customerPhone: identifier },
+            ],
+        },
+        include: {
+            items: {
+                include: {
+                    variant: {
+                        include: {
+                            product: {
+                                include: {
+                                    productImages: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        orderBy: { createdAt: "desc" },
+    });
+
+    if (orders.length === 0) {
+        throw new Error("Customer not found");
+    }
+
+    const firstOrder = orders[0];
+    const totalSpent = orders.reduce((sum, o) => sum + o.totalPayable, 0);
+
+    return {
+        info: {
+            name: firstOrder.customerName,
+            email: firstOrder.customerEmail,
+            mobile: firstOrder.customerPhone,
+            address: {
+                line1: firstOrder.deliveryAddress,
+                line2: firstOrder.area,
+                city: firstOrder.district,
+                zip: firstOrder.zipCode || "",
+            }
+        },
+        orders: orders.map(o => ({
+            id: o.id,
+            orderId: o.orderNumber,
+            orderDate: o.createdAt,
+            status: o.status.toLowerCase(),
+            totalAmount: o.totalPayable,
+            items: o.items
+        })),
+        stats: {
+            totalOrders: orders.length,
+            totalSpent,
+            avgOrderValue: totalSpent / orders.length,
+            lastOrderDate: firstOrder.createdAt
+        }
+    };
+};
+
 export const OrderService = {
     createOrder,
     getMyOrders,
@@ -737,4 +899,6 @@ export const OrderService = {
     deleteOrder,
     getOrderStats,
     trackSteadfastOrder,
+    getMerchantCustomers,
+    getCustomerDetails,
 };

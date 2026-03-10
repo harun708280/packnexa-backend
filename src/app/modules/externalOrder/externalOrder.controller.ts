@@ -7,8 +7,7 @@ import httpStatus from "http-status";
 import AppError from "../../errorHelper/AppError";
 
 const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
-    // In a real scenario, we would validate the API Key/Secret here
-    // For now, we assume the merchantDetailsId is passed in the headers or body for development
+
     const merchantDetailsId = req.headers["x-merchant-id"] as string;
     const providedSecret = req.headers["x-webhook-secret"] as string;
 
@@ -20,7 +19,7 @@ const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
         });
     }
 
-    // Validate Webhook Secret
+
     const merchant = await prisma.merchantDetails.findUnique({
         where: { id: merchantDetailsId },
         select: { id: true, webhookSecret: true }
@@ -55,7 +54,7 @@ const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
             statusCode: 400,
             success: false,
             message: "Order ID (id) is missing in the request body",
-            data: req.body // Send back what was received for debugging
+            data: req.body
         });
     }
 
@@ -72,7 +71,6 @@ const syncWordPressOrder = catchAsync(async (req: Request, res: Response) => {
 const getExternalLogs = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
 
-    // Fetch merchantDetailsId using userId since it's not in the token
     const merchant = await prisma.merchantDetails.findUnique({
         where: { userId: user.userId }
     });
@@ -140,7 +138,7 @@ const getWebhookConfig = catchAsync(async (req: Request, res: Response) => {
 const generateWebhookSecret = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
 
-    // Generate a random secret
+
     const newSecret = `pk_ws_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`;
 
     const merchant = await prisma.merchantDetails.update({

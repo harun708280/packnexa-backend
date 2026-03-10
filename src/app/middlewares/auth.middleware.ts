@@ -23,7 +23,7 @@ export const authMiddleware = async (
         envVariables.JWT_ACCESS_SECRET!
       ) as jwt.JwtPayload;
 
-      // Verify session exists in DB
+
       if (decoded.sessionId) {
         const session = await prisma.userSession.findUnique({
           where: { id: decoded.sessionId },
@@ -36,7 +36,7 @@ export const authMiddleware = async (
           });
         }
 
-        // Update lastActiveAt
+
         await prisma.userSession.update({
           where: { id: decoded.sessionId },
           data: { lastActiveAt: new Date() },
@@ -59,7 +59,7 @@ export const authMiddleware = async (
       envVariables.JWT_REFRESH_SECRET!
     ) as jwt.JwtPayload;
 
-    // Verify session exists in DB for refresh token too
+
     if (decoded.sessionId) {
       const session = await prisma.userSession.findUnique({
         where: { id: decoded.sessionId },

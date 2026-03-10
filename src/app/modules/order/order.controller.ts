@@ -114,6 +114,31 @@ const trackOrder = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const getMerchantCustomers = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const result = await OrderService.getMerchantCustomers(user.userId, req.query as any);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Merchant customers fetched successfully",
+        meta: result.meta,
+        data: result.data,
+    });
+});
+
+const getCustomerDetails = catchAsync(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { identifier } = req.params;
+    const result = await OrderService.getCustomerDetails(user.userId, identifier);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Customer details fetched successfully",
+        data: result,
+    });
+});
 
 export const OrderController = {
     createOrder,
@@ -125,4 +150,6 @@ export const OrderController = {
     deleteOrder,
     getOrderStats,
     trackOrder,
+    getMerchantCustomers,
+    getCustomerDetails,
 };

@@ -34,7 +34,7 @@ const createUser = async (Payload: CreateUserData) => {
     });
   } catch (error) {
     console.error("Email sending failed:", error);
-    // Don't throw error here, so user creation still succeeds
+
   }
 
   return { user };

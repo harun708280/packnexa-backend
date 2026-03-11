@@ -30,7 +30,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
     }
 
     if (!externalLog) {
-        // 1. Log the raw external order if it's new
+
         externalLog = await prisma.externalOrderLog.create({
             data: {
                 merchantDetailsId,
@@ -45,7 +45,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
     const matchedItems: any[] = [];
     const unmatchedItems: any[] = [];
 
-    // 2. Try to match each item with a variant using merchantWebProductId
+
     console.log(`[SYNC-DEBUG] Syncing order ${payload.id} for merchant ${merchantDetailsId}. Items: ${items.length}`);
 
     for (const item of items) {
@@ -75,14 +75,13 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
         }
     }
 
-    // 3. Logic: If ALL items match and have stock, create the real order
+
     if (unmatchedItems.length === 0 && matchedItems.length > 0) {
         console.log(`[SYNC-DEBUG] All items matched. Entering transaction for order ${payload.id}`);
-        // Create the official order in Packnexa
+
         const resultOrder = await prisma.$transaction(async (tx) => {
             const orderNumber = `WP-${payload.id}`;
 
-            // Check if this order already exists to prevent P2002 error
             const existingOrder = await tx.order.findUnique({
                 where: { orderNumber },
             });
@@ -95,10 +94,10 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
             const { district, area } = mapLocationData(payload);
             const customerPhone = sanitizePhoneNumber(payload.billing?.phone || "");
 
-            // Generate tracking number similar to manual orders
+
             const trackingNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-            // Map payment method robustly
+
             const wpMethod = (payload.payment_method || "").toLowerCase();
             const wpMethodTitle = payload.payment_method_title || "";
             const paymentMethod = wpMethod === "cod" || wpMethod.includes("cash") || wpMethodTitle.toLowerCase().includes("cash") ? "COD" : (wpMethodTitle || "Pre-paid");
@@ -135,7 +134,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
                 },
             });
 
-            // Update Stock
+
             for (const mi of matchedItems) {
                 await tx.productVariant.update({
                     where: { id: mi.variant.id },
@@ -150,7 +149,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
             return newOrder;
         });
 
-        // Update log status
+
         await prisma.externalOrderLog.update({
             where: { id: externalLog.id },
             data: { status: "COMPLETED" },
@@ -159,7 +158,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
         return { order: resultOrder, status: "COMPLETED" };
     } else {
         console.warn(`[SYNC-DEBUG] Sync failed for order ${payload.id}. Unmatched items: ${unmatchedItems.length}`);
-        // Some items didn't match or insufficient stock
+
         await prisma.externalOrderLog.update({
             where: { id: externalLog.id },
             data: {

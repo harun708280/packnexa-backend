@@ -58,7 +58,7 @@ export const merchantPaymentsSchema = z.object({
   mobileBankingMethod: z.string().optional(),
   mobileNumber: z.string().optional(),
 
-  // Legacy fields made optional
+
   usedMethod: z.string().optional(),
   paymentNumber: z.string().optional(),
   bankDetails: z.string().optional(),

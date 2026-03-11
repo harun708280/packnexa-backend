@@ -82,7 +82,7 @@ model Payments {
   merchantDetailsId   String          @unique
   status              PaymentStatus?  @default(PENDING)
   
-  // New Payment Fields
+ 
   paymentMethod       String?
   bankName            String?
   branchName          String?
@@ -92,7 +92,7 @@ model Payments {
   mobileBankingMethod String?
   mobileNumber        String?
 
-  // Legacy fields made optional
+  
   usedMethod          String?
   paymentNumber       String?
   bankDetails         String?

@@ -24,7 +24,7 @@ const me = catchAsync(async (req: Request, res: Response) => {
   if (!userId) throw new Error("Unauthorized");
   const user = await UserService.me(userId);
 
-  // If role has changed, refresh tokens
+
   if (user && user.role !== currentRole && sessionId) {
     const payload = {
       userId: user.id,

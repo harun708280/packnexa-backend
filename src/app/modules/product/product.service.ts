@@ -131,7 +131,7 @@ const getMyProducts = async (
     ];
   }
 
-  // 1. Fetch products with basic info
+
   const [data, total] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -148,7 +148,6 @@ const getMyProducts = async (
 
   const productIds = data.map(p => p.id);
 
-  // 2. Fetch all related data in batches to avoid N+1
   const [images, variants] = await Promise.all([
     prisma.productImage.findMany({
       where: { productId: { in: productIds } },
@@ -163,7 +162,6 @@ const getMyProducts = async (
     })
   ]);
 
-  // 3. Manually join the data
   const result = data.map(product => {
     const productImages = images.filter(img => img.productId === product.id).slice(0, 1);
     const productVariants = variants.filter(v => v.productId === product.id).map(v => {

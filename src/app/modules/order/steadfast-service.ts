@@ -48,7 +48,7 @@ const createOrder = async (order: Order, merchantCredentials?: { apiKey?: string
         recipient_email: order.customerEmail || "",
         cod_amount: (() => {
             const method = (order.paymentMethod || "COD").toUpperCase();
-            // Check for common Cash on Delivery variations
+
             if (method.includes("COD") || method.includes("CASH") || method.includes("HAND") || method === "PAY ON DELIVERY") {
                 return order.totalPayable;
             }
@@ -136,7 +136,7 @@ const trackOrder = async (invoice: string, merchantCredentials?: { apiKey?: stri
         const text = await response.text();
         try {
             const result = JSON.parse(text) as SteadfastStatusResponse;
-            // Handle cases where API returns 401 for non-existent invoices by returning null
+
             if (result.status === 401) return null;
             return result;
         } catch (e) {

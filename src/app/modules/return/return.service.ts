@@ -15,10 +15,7 @@ const createReturn = async (identifier: string, payload: any, isMerchantDetailsI
         if (!merchantDetails && !isInternal) {
             throw new AppError(httpStatus.NOT_FOUND, "Merchant not found");
         }
-        // If isInternal is true and merchantDetails is null, it implies an invalid identifier was passed for an internal call.
-        // For now, we'll let the subsequent order check fail, or assume internal calls provide valid identifiers.
-        // If merchantDetails is null and isInternal is true, we can't proceed with a valid merchantDetailsId.
-        // This scenario might need more specific error handling depending on the system's design.
+
         if (!merchantDetails) {
             throw new AppError(httpStatus.NOT_FOUND, "Merchant not found for the given identifier");
         }
@@ -34,7 +31,6 @@ const createReturn = async (identifier: string, payload: any, isMerchantDetailsI
         throw new AppError(httpStatus.NOT_FOUND, "Order not found or unauthorized");
     }
 
-    // Check if a return already exists for this order
     const existingReturn = await prisma.returnOrder.findUnique({
         where: { orderId: payload.orderId },
     });
@@ -62,7 +58,6 @@ const createReturn = async (identifier: string, payload: any, isMerchantDetailsI
             },
         });
 
-        // Update order status to RETURNED optionally or keep it as is
         await tx.order.update({
             where: { id: payload.orderId },
             data: { status: "RETURNED" },
@@ -105,7 +100,7 @@ const updateReturnStatus = async (returnId: string, payload: any) => {
             },
         });
 
-        // If APPROVED and backToStock is true, increment stock
+
         if (status === "APPROVED" && backToStock) {
             for (const item of returnOrder.items) {
                 await tx.productVariant.update({

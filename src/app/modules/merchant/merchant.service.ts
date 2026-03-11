@@ -458,44 +458,44 @@ const getOnboardingConfig = async () => {
             name: "bankName",
             label: "Bank Name",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "branchName",
             label: "Branch Name",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "accountName",
             label: "Account Name",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "accountNumber",
             label: "Account Number",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "routingNumber",
             label: "Routing Number",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "mobileBankingMethod",
             label: "Mobile Banking Method",
             type: "select",
             options: ["BKASH", "NAGAD", "ROCKET", "UPAY"],
-            required: false, // Conditional
+            required: false,
           },
           {
             name: "mobileNumber",
             label: "Mobile Number",
             type: "text",
-            required: false, // Conditional
+            required: false,
           },
         ],
       },
@@ -514,17 +514,16 @@ const getDashboardStats = async (userId: string) => {
 
   const merchantId = merchantDetails.id;
 
-  // 1. Total Orders
+
   const totalOrders = await prisma.order.count({
     where: { merchantDetailsId: merchantId },
   });
 
-  // 2. Total Products
   const totalProducts = await prisma.product.count({
     where: { merchantDetailsId: merchantId },
   });
 
-  // 3. Stock Value
+
   const variants = await prisma.productVariant.findMany({
     where: { merchantDetailsId: merchantId },
     include: { pricing: true },
@@ -534,7 +533,7 @@ const getDashboardStats = async (userId: string) => {
     return acc + curr.quantity * (curr.pricing?.salePrice || 0);
   }, 0);
 
-  // 4. Total Sales
+
   const totalSalesData = await prisma.order.aggregate({
     where: {
       merchantDetailsId: merchantId,
@@ -544,14 +543,14 @@ const getDashboardStats = async (userId: string) => {
   });
   const totalSales = totalSalesData._sum.totalPayable || 0;
 
-  // 5. Order Fulfillment Breakdown
+
   const fulfillment = await prisma.order.groupBy({
     by: ["status"],
     where: { merchantDetailsId: merchantId },
     _count: { id: true },
   });
 
-  // 6. Sales Trend (Last 7 Days)
+
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -582,7 +581,7 @@ const getDashboardStats = async (userId: string) => {
     })
   );
 
-  // 7. Top Customers
+
   const orders = await prisma.order.findMany({
     where: { merchantDetailsId: merchantId },
     select: {
@@ -613,7 +612,7 @@ const getDashboardStats = async (userId: string) => {
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
-  // 8. Top Products
+
   const orderItems = await prisma.orderItem.findMany({
     where: { order: { merchantDetailsId: merchantId } },
     include: {
@@ -644,7 +643,7 @@ const getDashboardStats = async (userId: string) => {
     .sort((a, b) => b.quantitySold - a.quantitySold)
     .slice(0, 10);
 
-  // 9. Low Stock / Stock Out
+
   const lowStockThreshold = 10;
   const stockAlerts = await prisma.productVariant.findMany({
     where: {

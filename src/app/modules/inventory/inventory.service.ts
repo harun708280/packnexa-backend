@@ -331,7 +331,7 @@ export const approveStockAdjustmentService = async (adjustmentId: string) => {
 
       if (!variant) throw new Error("Variant not found");
 
-      // Update variant quantity
+
       const updatedVariant = await tx.productVariant.update({
         where: { id: adjustment.variantId },
         data: {
@@ -341,7 +341,6 @@ export const approveStockAdjustmentService = async (adjustmentId: string) => {
         }
       });
 
-      // Log the transaction
       await tx.inventoryTransaction.create({
         data: {
           variantId: adjustment.variantId,
@@ -351,7 +350,7 @@ export const approveStockAdjustmentService = async (adjustmentId: string) => {
         }
       });
 
-      // Update adjustment status
+
       const updatedAdjustment = await tx.stockAdjustment.update({
         where: { id: adjustmentId },
         data: { status: "APPROVED" },

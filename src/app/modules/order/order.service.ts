@@ -160,7 +160,7 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
         ];
     }
 
-    // 1. Fetch base orders
+
     const [orders, total] = await Promise.all([
         prisma.order.findMany({
             where,
@@ -177,7 +177,7 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
 
     const orderIds = orders.map(o => o.id);
 
-    // 2. Fetch related data in parallel batches
+
     const items = await prisma.orderItem.findMany({
         where: { orderId: { in: orderIds } },
         include: {
@@ -200,7 +200,7 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
         }
     });
 
-    // 3. Assemble the data in-memory
+
     const data = orders.map(order => ({
         ...order,
         items: items.filter(item => item.orderId === order.id)
@@ -235,7 +235,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
         ];
     }
 
-    // 1. Fetch base orders
+
     const [orders, total] = await Promise.all([
         prisma.order.findMany({
             where,
@@ -253,7 +253,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
     const orderIds = orders.map(o => o.id);
     const merchantDetailsIds = [...new Set(orders.map(o => o.merchantDetailsId))];
 
-    // 2. Fetch related data in parallel batches
+
     const [items, merchantDetails] = await Promise.all([
         prisma.orderItem.findMany({
             where: { orderId: { in: orderIds } },
@@ -289,7 +289,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
         })
     ]);
 
-    // 3. Assemble the data in-memory
+
     const data = orders.map(order => ({
         ...order,
         items: items.filter(item => item.orderId === order.id),
@@ -316,17 +316,17 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         throw new Error("Order not found");
     }
 
-    // Role/Transition Guards
+
     if (payload.status === OrderStatus.SHIPPED && existingOrder.status !== OrderStatus.PACKED) {
         throw new Error(`Invalid transition. Only PACKED orders can be marked as SHIPPED. Current status: ${existingOrder.status}`);
     }
 
-    // [User Request] Block cancellation for SHIPPED orders
+
     if (payload.status === OrderStatus.CANCELLED && existingOrder.status === OrderStatus.SHIPPED) {
         throw new Error(`Order ${existingOrder.orderNumber} is already SHIPPED and cannot be cancelled. Please use RETURNED if the customer rejects it.`);
     }
 
-    // Prevent manual DELIVERED for Steadfast orders (Allow RETURNED manually per user request)
+
     const isSteadfastOrder = existingOrder.preferredCourier?.toLowerCase().includes("steadfast") ||
         existingOrder.preferredCourier?.toLowerCase().includes("system automatic") ||
         !existingOrder.preferredCourier;
@@ -336,7 +336,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
     }
 
     const result = await prisma.$transaction(async (tx) => {
-        // 1. Handle Inventory Restocking for CANCELLED (RETURNED is now handled in ReturnService)
+
         const isCurrentlyActive = !['CANCELLED', 'RETURNED'].includes(existingOrder.status);
         const willBeInactive = ['CANCELLED'].includes(payload.status as any);
 
@@ -362,7 +362,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
             }
         }
 
-        // 2. Handle Inventory Deduction if moving OUT of CANCELLED/RETURNED
+
         if (!isCurrentlyActive && !willBeInactive) {
             console.log(`[DEBUG] Deducting inventory for order ${existingOrder.orderNumber} as it moves back to active status: ${payload.status}`);
             for (const item of existingOrder.items) {
@@ -389,7 +389,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
             }
         }
 
-        // 3. Update the Order
+
         const updatedOrder = await tx.order.update({
             where: { id: orderId },
             data: {
@@ -398,7 +398,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
             },
         });
 
-        // 4. Auto-create ReturnOrder if status is RETURNED
+
         if (payload.status === OrderStatus.RETURNED) {
             const existingReturn = await tx.returnOrder.findUnique({
                 where: { orderId }
@@ -410,7 +410,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
                     data: {
                         orderId,
                         merchantDetailsId: existingOrder.merchantDetailsId,
-                        status: "PENDING", // Start as PENDING for admin review
+                        status: "PENDING",
                         reason: payload.adminNote || "Marked as returned by admin",
                         backToStock: false,
                         items: {
@@ -427,12 +427,12 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         return updatedOrder;
     });
 
-    // 4. Handle External Integrations (Steadfast)
+
     const isTargetingShipped = payload.status === OrderStatus.SHIPPED;
     const isSteadfastCourier =
         result.preferredCourier?.toLowerCase().includes("steadfast") ||
         result.preferredCourier?.toLowerCase().includes("system automatic") ||
-        !result.preferredCourier; // Default to Steadfast if not set
+        !result.preferredCourier;
 
     console.log(`[DEBUG] Steadfast Trigger Check for ${result.orderNumber}: isTargetingShipped=${isTargetingShipped}, isSteadfastCourier=${isSteadfastCourier}, preferredCourier="${result.preferredCourier}"`);
 
@@ -468,7 +468,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         }
     }
 
-    // 5. Return the final updated order (re-fetch to get trackingNumber and other updates)
+
     return prisma.order.findUnique({
         where: { id: orderId },
         include: {
@@ -760,9 +760,6 @@ const getMerchantCustomers = async (userId: string, query: { searchTerm?: string
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
-    // Prisma doesn't support complex grouping with pagination directly easily for this case
-    // We will aggregate manually or use a Raw query if performance is an issue.
-    // Given the current structure, we can group by email/phone.
 
     const where: any = { merchantDetailsId: merchantDetails.id };
     if (searchTerm) {
@@ -773,8 +770,7 @@ const getMerchantCustomers = async (userId: string, query: { searchTerm?: string
         ];
     }
 
-    // Get all orders for this merchant to aggregate
-    // Note: For very large datasets, this should be optimized.
+
     const allOrders = await prisma.order.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -789,7 +785,7 @@ const getMerchantCustomers = async (userId: string, query: { searchTerm?: string
                 name: order.customerName,
                 email: order.customerEmail,
                 phone: order.customerPhone,
-                city: order.district, // Using district as city matching frontend
+                city: order.district,
                 totalOrders: 0,
                 totalSpent: 0,
                 lastOrderDate: order.createdAt
@@ -824,7 +820,7 @@ const getCustomerDetails = async (userId: string, identifier: string) => {
         throw new Error("Merchant details not found");
     }
 
-    // Check if identifier is email or phone
+
     const isEmail = identifier.includes("@");
 
     const orders = await prisma.order.findMany({

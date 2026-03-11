@@ -19,18 +19,18 @@ import {
 
 const router = express.Router();
 
-// Stock Adjustment Routes (Move up to prevent conflict with :id)
+
 router.post("/stock-adjustment", authMiddleware, requestStockAdjustment);
 router.get("/stock-adjustment", authMiddleware, listStockAdjustments);
 
-// Merchant routes
+
 router.post("/", authMiddleware, addProduct);
-router.patch("/:id", authMiddleware, editProduct);
+router.patch("/:id", authMiddleware, editProduct)
 router.delete("/:id", authMiddleware, deleteProduct);
 router.get("/", authMiddleware, listProducts);
 router.get("/:id", authMiddleware, getProduct);
 
-// Warehouse/Admin routes
+
 router.get("/warehouse/pending", authMiddleware, adminMiddleware, listProducts);
 router.post("/warehouse/:id/approve", authMiddleware, adminMiddleware, warehouseApproveProduct);
 router.post("/warehouse/:id/reject", authMiddleware, adminMiddleware, warehouseRejectProduct);

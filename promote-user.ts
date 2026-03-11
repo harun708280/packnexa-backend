@@ -37,6 +37,5 @@ async function promoteVerifiedMerchants(email?: string) {
     }
 }
 
-// node dist/promote-user.js [EMAIL_ADDRESS]
 const email = process.argv[2];
 promoteVerifiedMerchants(email);

@@ -334,10 +334,40 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
     throw new Error("Product not found or access denied");
   }
 
-  const { variants, productImages, description, productName, category, merchantWebProductId } = payload;
+  const { variants, productImages, description, productName, category } = payload;
+
+  let shouldUpdateStatus = false;
+
+  if (variants) {
+    const incomingVariantIds = variants.filter((v: any) => v.id).map((v: any) => v.id);
+    const existingVariantIds = existingProduct.variants.map((v) => v.id);
+
+
+    if (incomingVariantIds.length !== existingVariantIds.length || existingVariantIds.some(id => !incomingVariantIds.includes(id))) {
+      shouldUpdateStatus = true;
+    }
+
+    if (!shouldUpdateStatus) {
+      for (const variant of variants) {
+        const existingVariant = existingProduct.variants.find((v) => v.id === variant.id);
+        if (existingVariant) {
+          const hasColorChanged = variant.color !== undefined && variant.color !== existingVariant.color;
+          const hasSizeChanged = variant.size !== undefined && variant.size !== existingVariant.size;
+          const hasWeightChanged = variant.weightKg !== undefined && Number(variant.weightKg) !== Number(existingVariant.weightKg);
+          const hasQuantityChanged = variant.quantity !== undefined && Number(variant.quantity) !== Number(existingVariant.quantity);
+
+          if (hasColorChanged || hasSizeChanged || hasWeightChanged || hasQuantityChanged) {
+            shouldUpdateStatus = true;
+            break;
+          }
+        }
+      }
+    }
+  }
 
   console.log('--- UPDATE PRODUCT PAYLOAD START ---');
   console.log('productId:', productId);
+  console.log('shouldUpdateStatus:', shouldUpdateStatus);
   console.log(JSON.stringify(payload, null, 2));
   console.log('--- UPDATE PRODUCT PAYLOAD END ---');
 
@@ -349,8 +379,8 @@ const updateProduct = async (userId: string, productId: string, payload: any) =>
         productName,
         description,
         category,
-        status: ProductStatus.PROCESSING,
-        rejectionReason: null,
+        status: shouldUpdateStatus ? ProductStatus.PROCESSING : existingProduct.status,
+        rejectionReason: shouldUpdateStatus ? null : existingProduct.rejectionReason,
         productImages: productImages ? {
           deleteMany: {},
           create: productImages.map((url: string) => ({ imageUrl: url })),

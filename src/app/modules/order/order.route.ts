@@ -68,6 +68,13 @@ router.patch(
 );
 
 router.patch(
+    "/bulk-update-status",
+    authMiddleware,
+    requireRole(UserRole.ADMIN, UserRole.MERCHANT),
+    OrderController.bulkUpdateOrderStatus
+);
+
+router.patch(
     "/update-order/:id",
     authMiddleware,
     requireRole(UserRole.MERCHANT),
@@ -86,6 +93,13 @@ router.delete(
     authMiddleware,
     requireRole(UserRole.ADMIN, UserRole.MERCHANT),
     OrderController.deleteOrder
+);
+
+router.post(
+    "/bulk-delete",
+    authMiddleware,
+    requireRole(UserRole.ADMIN, UserRole.MERCHANT),
+    OrderController.bulkDeleteOrders
 );
 
 export const orderRoutes = router;

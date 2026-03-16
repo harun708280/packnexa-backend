@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import catchAsync from "../../shared/catchAsync";
 import sendResponse from "../../shared/sendResponse";
+import { fileUploader } from "../../helper/fileUploader";
 
 const uploadFiles = catchAsync(async (req: Request, res: Response) => {
     const files = req.files as Express.Multer.File[];
@@ -9,16 +10,16 @@ const uploadFiles = catchAsync(async (req: Request, res: Response) => {
         throw new Error("No files uploaded");
     }
 
-    const filePaths = files.map(file => {
-        const relativePath = file.path.split("uploads/").pop();
-        return `uploads/${relativePath}`;
-    });
+    const uploadPromises = files.map(file => fileUploader.uploadToCloudinary(file));
+    const uploadResults = await Promise.all(uploadPromises);
+
+    const fileUrls = uploadResults.map(result => result.secure_url);
 
     sendResponse(res, {
         statusCode: 200,
         success: true,
         message: "Files uploaded successfully",
-        data: filePaths,
+        data: fileUrls,
     });
 });
 

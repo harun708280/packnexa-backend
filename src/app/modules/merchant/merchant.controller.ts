@@ -175,7 +175,7 @@ const getOnboardingConfig = catchAsync(async (req: Request, res: Response) => {
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const result = await MerchantService.getDashboardStats(user.userId);
+  const result = await MerchantService.getDashboardStats(user.userId, req.query as any);
 
   sendResponse(res, {
     statusCode: 200,

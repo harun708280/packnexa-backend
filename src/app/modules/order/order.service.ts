@@ -78,6 +78,7 @@ const createOrder = async (userId: string, payload: any) => {
                 discount,
                 totalPayable,
                 status: OrderStatus.PENDING,
+                isPreBooking: !!orderData.preBookingDate || orderData.isPreBooking || false,
                 preBookingDate: orderData.preBookingDate ? new Date(orderData.preBookingDate) : null,
             },
         });
@@ -148,7 +149,14 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
 
     const where: any = { merchantDetailsId: merchantDetails.id };
     if (status && status !== "ALL") {
-        where.status = status;
+        if (status === "PREBOOKING") {
+            where.OR = [
+                { isPreBooking: true },
+                { preBookingDate: { not: null } }
+            ];
+        } else {
+            where.status = status;
+        }
     }
 
     if (searchTerm) {
@@ -326,6 +334,19 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         throw new Error(`Order ${existingOrder.orderNumber} is already SHIPPED and cannot be cancelled. Please use RETURNED if the customer rejects it.`);
     }
 
+
+    // HOLD transition rules
+    if (payload.status === (OrderStatus as any).HOLD) {
+        if (!([OrderStatus.PENDING, OrderStatus.APPROVED] as OrderStatus[]).includes(existingOrder.status)) {
+            throw new Error(`Order ${existingOrder.orderNumber} cannot be put on HOLD because it is already ${existingOrder.status}`);
+        }
+    }
+
+    if (existingOrder.status === (OrderStatus as any).HOLD) {
+        if (!([OrderStatus.APPROVED, OrderStatus.CANCELLED] as OrderStatus[]).includes(payload.status)) {
+            throw new Error(`Order ${existingOrder.orderNumber} is on HOLD. You can only Confirm (Approve) or Cancel it.`);
+        }
+    }
 
     const isSteadfastOrder = existingOrder.preferredCourier?.toLowerCase().includes("steadfast") ||
         existingOrder.preferredCourier?.toLowerCase().includes("system automatic") ||
@@ -639,7 +660,7 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
                 district: orderData.district,
                 area: orderData.area,
                 zipCode: orderData.zipCode || null,
-                isPreBooking: orderData.isPreBooking,
+                isPreBooking: orderData.isPreBooking ?? (!!orderData.preBookingDate || existingOrder.isPreBooking),
                 preBookingDate: orderData.preBookingDate ? new Date(orderData.preBookingDate) : null,
                 paymentMethod: orderData.paymentMethod,
                 preferredCourier: orderData.preferredCourier || null,
@@ -657,10 +678,91 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
 };
 
 const deleteOrder = async (orderId: string) => {
-    const result = await prisma.order.delete({
-        where: { id: orderId }
+    return await prisma.$transaction(async (tx) => {
+        // Delete related ReturnOrder if exists
+        await tx.returnOrder.deleteMany({
+            where: { orderId: orderId }
+        });
+
+        const result = await tx.order.delete({
+            where: { id: orderId }
+        });
+        return result;
     });
-    return result;
+};
+
+const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: OrderStatus; adminNote?: string }) => {
+    const { orderIds, status, adminNote } = payload;
+
+    // Fetch all relevant orders
+    const orders = await prisma.order.findMany({
+        where: { id: { in: orderIds } },
+        include: { items: true }
+    });
+
+    if (orders.length === 0) {
+        throw new Error("No valid orders found for update");
+    }
+
+    const results = {
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        errors: [] as string[]
+    };
+
+    // Filter valid orders based on target status
+    let validOrders = orders;
+
+    if (status === OrderStatus.SHIPPED) {
+        // Only PACKED orders can be marked as SHIPPED (Dispatched)
+        validOrders = orders.filter(o => o.status === OrderStatus.PACKED);
+    } else if (status === OrderStatus.PACKED) {
+        // Typically APPROVED or PENDING orders can be PACKED
+        validOrders = orders.filter(o => ([OrderStatus.APPROVED, OrderStatus.PENDING] as OrderStatus[]).includes(o.status));
+    } else if (status === (OrderStatus as any).HOLD) {
+        // Only PENDING or APPROVED orders can be HOLD
+        validOrders = orders.filter(o => ([OrderStatus.PENDING, OrderStatus.APPROVED] as OrderStatus[]).includes(o.status));
+    } else if (status === OrderStatus.APPROVED) {
+        // PENDING or HOLD orders can be APPROVED
+        validOrders = orders.filter(o => ([OrderStatus.PENDING, (OrderStatus as any).HOLD] as OrderStatus[]).includes(o.status));
+    } else if (status === OrderStatus.CANCELLED) {
+        // Can't cancel SHIPPED or DELIVERED orders via bulk. HOLD orders CAN be cancelled.
+        validOrders = orders.filter(o => !([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.RETURNED] as OrderStatus[]).includes(o.status));
+    } else if (status === OrderStatus.RETURNED) {
+        // Usually only SHIPPED orders are RETURNED
+        validOrders = orders.filter(o => ([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.PACKED] as OrderStatus[]).includes(o.status));
+    }
+
+    results.skipped = orders.length - validOrders.length;
+
+    // Process each valid order individually for granular success/failure
+    for (const order of validOrders) {
+        try {
+            await updateOrderStatus(order.id, { status, adminNote });
+            results.success++;
+        } catch (error: any) {
+            results.failed++;
+            results.errors.push(`Order ${order.orderNumber}: ${error.message}`);
+        }
+    }
+
+    return results;
+};
+
+const bulkDeleteOrders = async (orderIds: string[]) => {
+    return await prisma.$transaction(async (tx) => {
+        // Delete related ReturnOrders first to avoid foreign key constraint violations
+        await tx.returnOrder.deleteMany({
+            where: { orderId: { in: orderIds } }
+        });
+
+        // Now delete the orders (OrderItems will cascade delete via schema)
+        const result = await tx.order.deleteMany({
+            where: { id: { in: orderIds } }
+        });
+        return result;
+    });
 };
 
 const getOrderStats = async (userId: string) => {
@@ -672,7 +774,7 @@ const getOrderStats = async (userId: string) => {
         throw new Error("Merchant details not found");
     }
 
-    const [sourceStats, statusStats, externalLogCount] = await Promise.all([
+    const [sourceStats, statusStats, externalLogCount, preBookingCount] = await Promise.all([
         prisma.order.groupBy({
             by: ["orderSource"],
             where: { merchantDetailsId: merchantDetails.id },
@@ -689,18 +791,33 @@ const getOrderStats = async (userId: string) => {
                 status: { not: "COMPLETED" },
             },
         }),
+        prisma.order.count({
+            where: {
+                merchantDetailsId: merchantDetails.id,
+                OR: [
+                    { isPreBooking: true },
+                    { preBookingDate: { not: null } }
+                ]
+            },
+        }),
     ]);
+
+    const stats = statusStats.reduce((acc: any, curr) => {
+        acc[curr.status] = curr._count;
+        return acc;
+    }, {});
+
+    // Manually add PREBOOKING count to statusStats for easier frontend access
+    stats.PREBOOKING = preBookingCount;
 
     return {
         sourceStats: sourceStats.reduce((acc: any, curr) => {
             acc[curr.orderSource] = curr._count;
             return acc;
         }, {}),
-        statusStats: statusStats.reduce((acc: any, curr) => {
-            acc[curr.status] = curr._count;
-            return acc;
-        }, {}),
+        statusStats: stats,
         externalLogCount,
+        preBookingCount,
     };
 };
 
@@ -897,4 +1014,6 @@ export const OrderService = {
     trackSteadfastOrder,
     getMerchantCustomers,
     getCustomerDetails,
+    bulkUpdateOrderStatus,
+    bulkDeleteOrders
 };

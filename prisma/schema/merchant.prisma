@@ -61,8 +61,8 @@ model BusinessDetails {
 model Documents {
   id                   String          @id @default(uuid())
   merchantDetailsId    String          @unique
-  nidFront             String
-  nidBack              String
+  nidFront             String?
+  nidBack              String?
   passport             String?
   drivingLicense       String?
   tradeLicense         String?
@@ -76,6 +76,7 @@ model Documents {
   updatedAt            DateTime        @updatedAt
   merchantDetails      MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
 }
+
 
 model Payments {
   id                  String          @id @default(uuid())

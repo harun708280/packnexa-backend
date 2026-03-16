@@ -132,12 +132,9 @@ const getBusinessDetails = async (userId: string) => {
 
   if (!merchantDetails) return null;
 
-  const { isVerifiedPhaseTwo, merchantDetailsId, ...rest } =
-    (await prisma.businessDetails.findUnique({
-      where: { merchantDetailsId: merchantDetails.id },
-    })) || {};
-
-  return rest;
+  return await prisma.businessDetails.findUnique({
+    where: { merchantDetailsId: merchantDetails.id },
+  });
 };
 
 const documents = async (payload: any) => {
@@ -196,23 +193,9 @@ const getDocuments = async (userId: string) => {
     return null;
   }
 
-  const documents = await prisma.documents.findUnique({
+  return await prisma.documents.findUnique({
     where: { merchantDetailsId: merchantDetails.id },
   });
-
-  if (!documents) {
-    return null;
-  }
-
-  const {
-    status,
-    reviewReason,
-    isVerifiedPhaseThree,
-    merchantDetailsId,
-    ...rest
-  } = documents;
-
-  return rest;
 };
 
 const completeOnboarding = async (userId: string) => {
@@ -503,7 +486,7 @@ const getOnboardingConfig = async () => {
   };
 };
 
-const getDashboardStats = async (userId: string) => {
+const getDashboardStats = async (userId: string, query: { startDate?: string; endDate?: string } = {}) => {
   const merchantDetails = await prisma.merchantDetails.findUnique({
     where: { userId },
   });
@@ -514,9 +497,20 @@ const getDashboardStats = async (userId: string) => {
 
   const merchantId = merchantDetails.id;
 
+  const whereCondition: any = { merchantDetailsId: merchantId };
+  if (query.startDate || query.endDate) {
+    whereCondition.createdAt = {};
+    if (query.startDate) whereCondition.createdAt.gte = new Date(query.startDate);
+    if (query.endDate) whereCondition.createdAt.lte = new Date(query.endDate);
+  }
 
   const totalOrders = await prisma.order.count({
-    where: { merchantDetailsId: merchantId },
+    where: whereCondition,
+  });
+
+  const totalOrdersData = await prisma.order.aggregate({
+    where: whereCondition,
+    _sum: { totalPayable: true },
   });
 
   const totalProducts = await prisma.product.count({
@@ -546,8 +540,9 @@ const getDashboardStats = async (userId: string) => {
 
   const fulfillment = await prisma.order.groupBy({
     by: ["status"],
-    where: { merchantDetailsId: merchantId },
+    where: whereCondition,
     _count: { id: true },
+    _sum: { totalPayable: true },
   });
 
 
@@ -626,15 +621,19 @@ const getDashboardStats = async (userId: string) => {
 
   const productMap = new Map<string, any>();
   orderItems.forEach((item) => {
+    const productId = item.variant?.productId;
+    if (!productId) return;
+
     const productName = item.variant?.product?.productName || "Unknown Product";
-    if (!productMap.has(productName)) {
-      productMap.set(productName, {
+    if (!productMap.has(productId)) {
+      productMap.set(productId, {
+        id: productId,
         name: productName,
         quantitySold: 0,
         revenue: 0,
       });
     }
-    const current = productMap.get(productName);
+    const current = productMap.get(productId);
     current.quantitySold += item.quantity;
     current.revenue += item.totalPrice;
   });
@@ -648,22 +647,30 @@ const getDashboardStats = async (userId: string) => {
   const stockAlerts = await prisma.productVariant.findMany({
     where: {
       merchantDetailsId: merchantId,
-      quantity: { lte: 20 },
+      quantity: { lte: 50 },
     },
     include: {
       product: true,
+      stockControl: true,
     },
     orderBy: { quantity: "asc" },
-    take: 10,
   });
 
-  const formattedStockAlerts = stockAlerts.map((v) => ({
-    productName: v.product?.productName,
-    variantName: v.variantName,
-    sku: v.sku,
-    quantity: v.quantity,
-    status: v.quantity === 0 ? "Out of Stock" : "Low Stock",
-  }));
+  const formattedStockAlerts = stockAlerts
+    .filter((v) => {
+      const threshold = v.stockControl?.reorderPoint ?? 10;
+      return v.quantity <= threshold;
+    })
+    .slice(0, 10)
+    .map((v) => ({
+      productId: v.productId,
+      variantId: v.id,
+      productName: v.product?.productName,
+      variantName: v.variantName,
+      sku: v.sku,
+      quantity: v.quantity,
+      status: v.quantity === 0 ? "Out of Stock" : "Low Stock",
+    }));
 
   const steadfastBalance = (merchantDetails.steadfastApiKey && merchantDetails.steadfastSecretKey)
     ? await SteadfastService.getBalance({
@@ -678,14 +685,17 @@ const getDashboardStats = async (userId: string) => {
     stockValue,
     totalSales,
     steadfastBalance: steadfastBalance || 0,
-    fulfillment: fulfillment.map((f) => ({
-      status: f.status,
-      count: f._count.id,
-    })),
     salesTrend,
     topCustomers,
     topProducts,
     stockAlerts: formattedStockAlerts,
+    approvalStatus: merchantDetails.isVerified ? "Verified" : "Pending",
+    totalOrdersAmount: totalOrdersData._sum.totalPayable || 0,
+    fulfillment: fulfillment.map((f: any) => ({
+      status: f.status,
+      count: f._count.id,
+      amount: f._sum?.totalPayable || 0,
+    })),
   };
 };
 

@@ -140,6 +140,29 @@ const getCustomerDetails = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const bulkUpdateOrderStatus = catchAsync(async (req: Request, res: Response) => {
+    const result = await OrderService.bulkUpdateOrderStatus(req.body);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Bulk order status updated successfully",
+        data: result,
+    });
+});
+
+const bulkDeleteOrders = catchAsync(async (req: Request, res: Response) => {
+    const { orderIds } = req.body;
+    const result = await OrderService.bulkDeleteOrders(orderIds);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Bulk orders deleted successfully",
+        data: result,
+    });
+});
+
 export const OrderController = {
     createOrder,
     getMyOrders,
@@ -152,4 +175,6 @@ export const OrderController = {
     trackOrder,
     getMerchantCustomers,
     getCustomerDetails,
+    bulkUpdateOrderStatus,
+    bulkDeleteOrders,
 };

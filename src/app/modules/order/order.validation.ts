@@ -12,7 +12,9 @@ const createOrderSchema = z.object({
     alternativePhone: z.string().optional().nullable().transform(val => val === "" ? null : val).pipe(
         z.string().regex(/^01[3-9]\d{8}$/, "Invalid Bangladeshi phone number (11 digits required)").optional().nullable()
     ),
-    customerEmail: z.string().email().optional().nullable(),
+    customerEmail: z.string().optional().nullable().transform(val => val === "" ? null : val).pipe(
+        z.string().email("Invalid email address").optional().nullable()
+    ),
     deliveryAddress: z.string().min(1, "Delivery address is required"),
     district: z.string().min(1, "District is required"),
     area: z.string().min(1, "Area is required"),

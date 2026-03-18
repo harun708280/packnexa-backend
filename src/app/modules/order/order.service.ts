@@ -1,6 +1,7 @@
 import { OrderStatus } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
 import { SteadfastService } from "./steadfast-service";
+import { FraudService } from "./fraud-service";
 
 const createOrder = async (userId: string, payload: any) => {
     const merchantDetails = await prisma.merchantDetails.findUnique({
@@ -1002,6 +1003,10 @@ const getCustomerDetails = async (userId: string, identifier: string) => {
     };
 };
 
+const checkCustomerFraud = async (phone: string) => {
+    return await FraudService.checkExternalFraud(phone);
+};
+
 export const OrderService = {
     createOrder,
     getMyOrders,
@@ -1015,5 +1020,6 @@ export const OrderService = {
     getMerchantCustomers,
     getCustomerDetails,
     bulkUpdateOrderStatus,
-    bulkDeleteOrders
+    bulkDeleteOrders,
+    checkCustomerFraud
 };

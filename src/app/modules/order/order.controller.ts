@@ -163,6 +163,18 @@ const bulkDeleteOrders = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const checkCustomerFraud = catchAsync(async (req: Request, res: Response) => {
+    const { phone } = req.params;
+    const result = await OrderService.checkCustomerFraud(phone);
+
+    sendResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: "Fraud check completed",
+        data: result,
+    });
+});
+
 export const OrderController = {
     createOrder,
     getMyOrders,
@@ -177,4 +189,5 @@ export const OrderController = {
     getCustomerDetails,
     bulkUpdateOrderStatus,
     bulkDeleteOrders,
+    checkCustomerFraud,
 };

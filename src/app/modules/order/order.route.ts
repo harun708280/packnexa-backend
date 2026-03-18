@@ -102,4 +102,11 @@ router.post(
     OrderController.bulkDeleteOrders
 );
 
+router.get(
+    "/fraud-check/:phone",
+    authMiddleware,
+    requireRole(UserRole.MERCHANT, UserRole.ADMIN),
+    OrderController.checkCustomerFraud
+);
+
 export const orderRoutes = router;

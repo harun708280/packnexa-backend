@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { Server } from "http";
 import app from "./app";
 import { envVariables } from "./config";
+import { initCronJobs } from "./app/jobs/cron-jobs";
 
 async function bootstrap() {
   let server: Server;
@@ -29,6 +30,8 @@ async function bootstrap() {
         chalk.green("🚀 Server is running on http://localhost:") +
         chalk.red.bold(envVariables.PORT)
       );
+
+      initCronJobs();
     });
 
     process.on("unhandledRejection", (error) => {

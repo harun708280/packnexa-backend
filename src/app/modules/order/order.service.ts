@@ -109,24 +109,6 @@ const createOrder = async (userId: string, payload: any) => {
                     totalPrice: finalQuantity * item.unitPrice,
                 },
             });
-
-            await tx.productVariant.update({
-                where: { id: item.variantId },
-                data: {
-                    quantity: variant.quantity - finalQuantity,
-                    soldQuantity: variant.soldQuantity + finalQuantity,
-                },
-            });
-
-
-            await tx.inventoryTransaction.create({
-                data: {
-                    variantId: item.variantId,
-                    type: "SALE",
-                    quantity: finalQuantity,
-                    note: `Sold via Order ${orderNumber} (Requested: ${item.quantity}, Fulfilled: ${finalQuantity})`,
-                },
-            });
         }
 
         return createdOrder;
@@ -315,7 +297,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
     };
 };
 
-const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus; adminNote?: string }) => {
+const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus; adminNote?: string }, isAutomated: boolean = false) => {
     const existingOrder = await prisma.order.findUnique({
         where: { id: orderId },
         include: { items: true }
@@ -353,44 +335,24 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         existingOrder.preferredCourier?.toLowerCase().includes("system automatic") ||
         !existingOrder.preferredCourier;
 
-    if (isSteadfastOrder && existingOrder.trackingNumber && payload.status === OrderStatus.DELIVERED) {
+    if (isSteadfastOrder && existingOrder.trackingNumber && payload.status === OrderStatus.DELIVERED && !isAutomated) {
         throw new Error(`Manual status update to ${payload.status} is restricted for Steadfast orders. Status will sync automatically from the courier.`);
     }
 
     const result = await prisma.$transaction(async (tx) => {
 
-        const isCurrentlyActive = !['CANCELLED', 'RETURNED'].includes(existingOrder.status);
-        const willBeInactive = ['CANCELLED'].includes(payload.status as any);
-
-        if (isCurrentlyActive && willBeInactive) {
-            console.log(`[DEBUG] Restocking inventory for order ${existingOrder.orderNumber} as it moves to ${payload.status}`);
-            for (const item of existingOrder.items) {
-                await tx.productVariant.update({
-                    where: { id: item.variantId },
-                    data: {
-                        quantity: { increment: item.quantity },
-                        soldQuantity: { decrement: item.quantity },
-                    },
-                });
-
-                await tx.inventoryTransaction.create({
-                    data: {
-                        variantId: item.variantId,
-                        type: "RETURN",
-                        quantity: item.quantity,
-                        note: `Stock returned from Order ${existingOrder.orderNumber} (Transition: ${existingOrder.status} -> ${payload.status})`,
-                    },
-                });
-            }
-        }
+        const dispatchedStatuses: OrderStatus[] = [OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.COMPLETED];
+        const wasDispatched = dispatchedStatuses.includes(existingOrder.status);
+        const willBeDispatched = dispatchedStatuses.includes(payload.status);
+        const willBeInactive = payload.status === OrderStatus.CANCELLED;
 
 
-        if (!isCurrentlyActive && !willBeInactive) {
-            console.log(`[DEBUG] Deducting inventory for order ${existingOrder.orderNumber} as it moves back to active status: ${payload.status}`);
+        if (!wasDispatched && willBeDispatched) {
+            console.log(`[INVENTORY] Deducting stock for order ${existingOrder.orderNumber} as it moves to ${payload.status}`);
             for (const item of existingOrder.items) {
                 const variant = await tx.productVariant.findUnique({ where: { id: item.variantId } });
                 if (!variant || variant.quantity < item.quantity) {
-                    throw new Error(`Insufficient stock to re-activate order for item ${item.variantId}`);
+                    throw new Error(`Insufficient stock for item "${variant?.variantName || item.variantId}". Available: ${variant?.quantity || 0}, Required: ${item.quantity}`);
                 }
                 await tx.productVariant.update({
                     where: { id: item.variantId },
@@ -399,13 +361,34 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
                         soldQuantity: { increment: item.quantity },
                     },
                 });
-
                 await tx.inventoryTransaction.create({
                     data: {
                         variantId: item.variantId,
                         type: "SALE",
                         quantity: item.quantity,
-                        note: `Stock deducted again for Order ${existingOrder.orderNumber} (Re-activated to ${payload.status})`,
+                        note: `Stock deducted for Order ${existingOrder.orderNumber} (Dispatch: ${existingOrder.status} -> ${payload.status})`,
+                    },
+                });
+            }
+        }
+
+
+        if (wasDispatched && willBeInactive) {
+            console.log(`[INVENTORY] Restocking for order ${existingOrder.orderNumber} as it moves to ${payload.status}`);
+            for (const item of existingOrder.items) {
+                await tx.productVariant.update({
+                    where: { id: item.variantId },
+                    data: {
+                        quantity: { increment: item.quantity },
+                        soldQuantity: { decrement: item.quantity },
+                    },
+                });
+                await tx.inventoryTransaction.create({
+                    data: {
+                        variantId: item.variantId,
+                        type: "RETURN",
+                        quantity: item.quantity,
+                        note: `Stock restocked for Order ${existingOrder.orderNumber} (Restock: ${existingOrder.status} -> ${payload.status})`,
                     },
                 });
             }
@@ -591,20 +574,8 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
     const { items, ...orderData } = payload;
 
     const result = await prisma.$transaction(async (tx) => {
-
-        for (const oldItem of existingOrder.items) {
-            await tx.productVariant.update({
-                where: { id: oldItem.variantId },
-                data: {
-                    quantity: { increment: oldItem.quantity },
-                    soldQuantity: { decrement: oldItem.quantity },
-                },
-            });
-        }
-
-
+        // Order is PENDING, no inventory deducted yet.
         await tx.orderItem.deleteMany({ where: { orderId } });
-
 
         let subtotal = 0;
         for (const item of items) {
@@ -629,21 +600,6 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
                     totalPrice: item.quantity * item.unitPrice,
-                },
-            });
-            await tx.productVariant.update({
-                where: { id: item.variantId },
-                data: {
-                    quantity: { decrement: item.quantity },
-                    soldQuantity: { increment: item.quantity },
-                },
-            });
-            await tx.inventoryTransaction.create({
-                data: {
-                    variantId: item.variantId,
-                    type: "SALE",
-                    quantity: item.quantity,
-                    note: `Sold via edited Order ${existingOrder.orderNumber}`,
                 },
             });
         }
@@ -740,7 +696,7 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
     // Process each valid order individually for granular success/failure
     for (const order of validOrders) {
         try {
-            await updateOrderStatus(order.id, { status, adminNote });
+            await updateOrderStatus(order.id, { status, adminNote }, false);
             results.success++;
         } catch (error: any) {
             results.failed++;
@@ -857,7 +813,7 @@ const trackSteadfastOrder = async (orderId: string) => {
 
         if (newStatus && newStatus !== order.status) {
             console.log(`[SYNC] Updating order ${order.orderNumber} status from ${order.status} to ${newStatus} based on Steadfast track response.`);
-            await updateOrderStatus(orderId, { status: newStatus, adminNote: `Auto-synced from Steadfast: ${steadfastResult.delivery_status}` });
+            await updateOrderStatus(orderId, { status: newStatus, adminNote: `Auto-synced from Steadfast: ${steadfastResult.delivery_status}` }, true);
         }
     }
 
@@ -1003,6 +959,41 @@ const getCustomerDetails = async (userId: string, identifier: string) => {
     };
 };
 
+const syncAllSteadfastOrders = async () => {
+    console.log(`[JOB] Starting Steadfast status sync at ${new Date().toLocaleString()}`);
+
+    try {
+        const shippedOrders = await prisma.order.findMany({
+            where: {
+                status: OrderStatus.SHIPPED,
+                OR: [
+                    { preferredCourier: { contains: "steadfast", mode: "insensitive" } },
+                    { preferredCourier: null },
+                    { preferredCourier: "" },
+                    { preferredCourier: { contains: "system automatic", mode: "insensitive" } }
+                ],
+                trackingNumber: { not: null }
+            },
+            select: { id: true, orderNumber: true }
+        });
+
+        console.log(`[JOB] Found ${shippedOrders.length} shipped orders for sync.`);
+
+        for (const order of shippedOrders) {
+            try {
+                await trackSteadfastOrder(order.id);
+                await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+                console.error(`[JOB-ERROR] Failed to sync order ${order.orderNumber}:`, error);
+            }
+        }
+
+        console.log(`[JOB] Steadfast status sync completed.`);
+    } catch (error) {
+        console.error(`[JOB-ERROR] Fatal error during Steadfast sync job:`, error);
+    }
+};
+
 const checkCustomerFraud = async (phone: string) => {
     return await FraudService.checkExternalFraud(phone);
 };
@@ -1017,6 +1008,7 @@ export const OrderService = {
     deleteOrder,
     getOrderStats,
     trackSteadfastOrder,
+    syncAllSteadfastOrders,
     getMerchantCustomers,
     getCustomerDetails,
     bulkUpdateOrderStatus,

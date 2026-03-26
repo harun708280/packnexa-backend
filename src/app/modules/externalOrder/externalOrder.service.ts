@@ -135,17 +135,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
             });
 
 
-            for (const mi of matchedItems) {
-                await tx.productVariant.update({
-                    where: { id: mi.variant.id },
-                    data: {
-                        quantity: { decrement: mi.quantity },
-                        soldQuantity: { increment: mi.quantity }
-                    },
-                });
-            }
-
-            console.log(`[SYNC-DEBUG] Order ${orderNumber} created successfully in database.`);
+            console.log(`[SYNC-DEBUG] Order ${orderNumber} created successfully in database (PENDING).`);
             return newOrder;
         });
 

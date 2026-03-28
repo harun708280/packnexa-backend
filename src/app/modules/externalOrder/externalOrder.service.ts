@@ -48,17 +48,28 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
 
     console.log(`[SYNC-DEBUG] Syncing order ${payload.id} for merchant ${merchantDetailsId}. Items: ${items.length}`);
 
+    const merchantVariants = await prisma.productVariant.findMany({
+        where: { merchantDetailsId }
+    });
+
     for (const item of items) {
-        const matchId = String(item.variation_id || item.product_id);
-        const variant = await prisma.productVariant.findFirst({
-            where: {
-                merchantDetailsId,
-                merchantWebProductId: matchId,
-            },
-        });
+        const rawMatchId = String(item.variation_id || item.product_id || "");
+        const matchId = rawMatchId.trim();
+
+        console.log(`[SYNC-DEBUG] Attempting to match item: "${item.name}" (WebID: "${matchId}")`);
+
+        if (!matchId || matchId === "0") {
+            console.warn(`[SYNC-DEBUG] Item "${item.name}" has no valid variation_id or product_id. Skipping match.`);
+            unmatchedItems.push({ item, reason: "Missing Product ID from WordPress" });
+            continue;
+        }
+
+        const variant = merchantVariants.find(v =>
+            v.merchantWebProductId && v.merchantWebProductId.trim() === matchId
+        );
 
         if (variant) {
-            console.log(`[SYNC-DEBUG] Item ${item.name} matched with variant ${variant.variantName} (SKU: ${variant.sku}). Stock: ${variant.quantity}/${item.quantity}`);
+            console.log(`[SYNC-DEBUG] Match Found: "${item.name}" -> Packnexa: "${variant.variantName}" (SKU: ${variant.sku}). Stock: ${variant.quantity}, Requested: ${item.quantity}`);
             if (variant.quantity >= item.quantity) {
                 matchedItems.push({
                     variant,
@@ -66,18 +77,24 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
                     price: Number(item.price),
                 });
             } else {
-                console.warn(`[SYNC-DEBUG] Item ${item.name} has insufficient stock. Required: ${item.quantity}, Available: ${variant.quantity}`);
-                unmatchedItems.push(item);
+                console.warn(`[SYNC-DEBUG] Insufficient stock for "${item.name}". Available: ${variant.quantity}, Requested: ${item.quantity}`);
+                unmatchedItems.push({
+                    item,
+                    reason: `Insufficient stock for "${item.name}". Available: ${variant.quantity}, Requested: ${item.quantity}`
+                });
             }
         } else {
-            console.warn(`[SYNC-DEBUG] Item ${item.name} (WebID: ${matchId}) could not be matched with any variant for merchant ${merchantDetailsId}`);
-            unmatchedItems.push(item);
+            console.warn(`[SYNC-DEBUG] No match found in Packnexa for WebID: "${matchId}" (Item: "${item.name}")`);
+            unmatchedItems.push({
+                item,
+                reason: `Product with ID "${matchId}" ("${item.name}") not found in Packnexa.`
+            });
         }
     }
 
 
     if (unmatchedItems.length === 0 && matchedItems.length > 0) {
-        console.log(`[SYNC-DEBUG] All items matched. Entering transaction for order ${payload.id}`);
+        console.log(`[SYNC-DEBUG] All items matched successfully for order ${payload.id}. Entering transaction.`);
 
         const resultOrder = await prisma.$transaction(async (tx) => {
             const orderNumber = `WP-${payload.id}`;
@@ -147,19 +164,18 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
 
         return { order: resultOrder, status: "COMPLETED" };
     } else {
-        console.warn(`[SYNC-DEBUG] Sync failed for order ${payload.id}. Unmatched items: ${unmatchedItems.length}`);
+        const errorDetails = unmatchedItems.map(ui => ui.reason).join(" | ");
+        console.warn(`[SYNC-DEBUG] Sync failed for order ${payload.id}. Errors: ${errorDetails}`);
 
         await prisma.externalOrderLog.update({
             where: { id: externalLog.id },
             data: {
                 status: "PARTIAL",
-                errorMessage: unmatchedItems.length > 0
-                    ? `Missing or insufficient stock for ${unmatchedItems.length} items.`
-                    : "Partial match found or insufficient stock."
+                errorMessage: errorDetails || "Partial match found or insufficient stock."
             },
         });
 
-        return { logId: externalLog.id, status: "PARTIAL_SYNC_REQUIRED" };
+        return { logId: externalLog.id, status: "PARTIAL_SYNC_REQUIRED", message: errorDetails };
     }
 };
 

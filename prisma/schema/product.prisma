@@ -51,7 +51,7 @@ model ProductVariant {
   color                 String?
   size                  String?
   merchantDetailsId     String
-  merchantWebProductId  String?                @unique
+  merchantWebProductId  String?
   batch                 Batch?
   inventoryTransactions InventoryTransaction[]
   stockControl          StockControl?
@@ -63,6 +63,7 @@ model ProductVariant {
   product               Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouse             Warehouse              @relation(fields: [warehouseId], references: [id])
 
+  @@unique([merchantDetailsId, merchantWebProductId])
   @@map("product_variants")
 }
 

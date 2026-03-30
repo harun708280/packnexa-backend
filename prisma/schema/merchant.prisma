@@ -18,6 +18,8 @@ model MerchantDetails {
   webhookSecret     String?            @unique
   steadfastApiKey   String?
   steadfastSecretKey String?
+  fraudCheckApiKey  String?
+  fraudCheckBaseUrl String?
 }
 
 model PersonalDetails {

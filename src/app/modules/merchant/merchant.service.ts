@@ -496,56 +496,70 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
   }
 
   const merchantId = merchantDetails.id;
-
   const whereCondition: any = { merchantDetailsId: merchantId };
+
   if (query.startDate || query.endDate) {
     whereCondition.createdAt = {};
     if (query.startDate) whereCondition.createdAt.gte = new Date(query.startDate);
     if (query.endDate) whereCondition.createdAt.lte = new Date(query.endDate);
   }
 
-  const totalOrders = await prisma.order.count({
-    where: whereCondition,
-  });
+  const [
+    totalOrders,
+    totalOrdersStats,
+    totalProducts,
+    variants,
+    totalSalesData,
+    fulfillmentRaw,
+    ordersForCustomers,
+    orderItemsRaw,
+    stockAlertsRaw
+  ] = await Promise.all([
+    prisma.order.count({ where: whereCondition }),
+    prisma.order.aggregate({
+      where: whereCondition,
+      _sum: { totalPayable: true }
+    }),
+    prisma.product.count({ where: { merchantDetailsId: merchantId } }),
+    prisma.productVariant.findMany({
+      where: { merchantDetailsId: merchantId },
+      include: { pricing: true }
+    }),
+    prisma.order.aggregate({
+      where: { ...whereCondition, status: "DELIVERED" },
+      _sum: { totalPayable: true }
+    }),
+    prisma.order.groupBy({
+      by: ["status"],
+      where: whereCondition,
+      _count: { id: true },
+      _sum: { totalPayable: true }
+    }),
+    prisma.order.findMany({
+      where: whereCondition,
+      select: { customerName: true, customerEmail: true, customerPhone: true, totalPayable: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100 // Sample for top customers
+    }),
+    prisma.orderItem.findMany({
+      where: { order: whereCondition },
+      include: { variant: { include: { product: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200 // Sample for top products
+    }),
+    prisma.productVariant.findMany({
+      where: { merchantDetailsId: merchantId, quantity: { lte: 50 } },
+      include: { product: true, stockControl: true },
+      orderBy: { quantity: "asc" },
+      take: 10
+    })
+  ]);
 
-  const totalOrdersData = await prisma.order.aggregate({
-    where: whereCondition,
-    _sum: { totalPayable: true },
-  });
-
-  const totalProducts = await prisma.product.count({
-    where: { merchantDetailsId: merchantId },
-  });
-
-
-  const variants = await prisma.productVariant.findMany({
-    where: { merchantDetailsId: merchantId },
-    include: { pricing: true },
-  });
-
-  const stockValue = variants.reduce((acc, curr) => {
-    return acc + curr.quantity * (curr.pricing?.salePrice || 0);
-  }, 0);
-
-
-  const totalSalesData = await prisma.order.aggregate({
-    where: {
-      ...whereCondition,
-      status: "DELIVERED",
-    },
-    _sum: { totalPayable: true },
-  });
+  // Calculations
+  const stockValue = variants.reduce((acc, curr) => acc + (curr.quantity * (curr.pricing?.salePrice || 0)), 0);
   const totalSales = totalSalesData._sum.totalPayable || 0;
 
-
-  const fulfillment = await prisma.order.groupBy({
-    by: ["status"],
-    where: whereCondition,
-    _count: { id: true },
-    _sum: { totalPayable: true },
-  });
-
-
+  // Last 7 Days Trend
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -557,126 +571,60 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     last7Days.map(async (date: Date) => {
       const nextDate = new Date(date);
       nextDate.setDate(nextDate.getDate() + 1);
-
       const dailyTotal = await prisma.order.aggregate({
         where: {
           merchantDetailsId: merchantId,
-          createdAt: {
-            gte: date,
-            lt: nextDate,
-          },
+          createdAt: { gte: date, lt: nextDate }
         },
-        _sum: { totalPayable: true },
+        _sum: { totalPayable: true }
       });
-
       return {
         name: date.toLocaleDateString("en-US", { weekday: "short" }),
-        value: dailyTotal._sum.totalPayable || 0,
+        value: dailyTotal._sum.totalPayable || 0
       };
     })
   );
 
-
-  const orders = await prisma.order.findMany({
-    where: whereCondition,
-    select: {
-      customerName: true,
-      customerEmail: true,
-      customerPhone: true,
-      totalPayable: true,
-    },
+  // Top Customers Processing
+  const customerMap = new Map();
+  ordersForCustomers.forEach(o => {
+    const id = o.customerPhone || o.customerEmail;
+    if(!customerMap.has(id)) customerMap.set(id, { name: o.customerName, email: o.customerEmail, phoneNumber: o.customerPhone, orderCount: 0, totalSpent: 0 });
+    const c = customerMap.get(id);
+    c.orderCount++;
+    c.totalSpent += o.totalPayable;
   });
+  const topCustomers = Array.from(customerMap.values()).sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 10);
 
-  const customerMap = new Map<string, any>();
-  orders.forEach((order) => {
-    const identifier = order.customerEmail || order.customerPhone;
-    if (!customerMap.has(identifier)) {
-      customerMap.set(identifier, {
-        name: order.customerName,
-        email: order.customerEmail,
-        phoneNumber: order.customerPhone,
-        orderCount: 0,
-        totalSpent: 0,
-      });
-    }
-    const current = customerMap.get(identifier);
-    current.orderCount += 1;
-    current.totalSpent += order.totalPayable;
+  // Top Products Processing
+  const productMap = new Map();
+  orderItemsRaw.forEach(item => {
+    const pId = item.variant?.productId;
+    if(!pId) return;
+    if(!productMap.has(pId)) productMap.set(pId, { id: pId, name: item.variant?.product?.productName || "Unknown", quantitySold: 0, revenue: 0 });
+    const p = productMap.get(pId);
+    p.quantitySold += item.quantity;
+    p.revenue += item.totalPrice;
   });
+  const topProducts = Array.from(productMap.values()).sort((a,b) => b.quantitySold - a.quantitySold).slice(0, 10);
 
-  const topCustomers = Array.from(customerMap.values())
-    .sort((a, b) => b.totalSpent - a.totalSpent)
-    .slice(0, 10);
-
-
-  const orderItems = await prisma.orderItem.findMany({
-    where: { order: whereCondition },
-    include: {
-      variant: {
-        include: {
-          product: true,
-        },
-      },
-    },
-  });
-
-  const productMap = new Map<string, any>();
-  orderItems.forEach((item) => {
-    const productId = item.variant?.productId;
-    if (!productId) return;
-
-    const productName = item.variant?.product?.productName || "Unknown Product";
-    if (!productMap.has(productId)) {
-      productMap.set(productId, {
-        id: productId,
-        name: productName,
-        quantitySold: 0,
-        revenue: 0,
-      });
-    }
-    const current = productMap.get(productId);
-    current.quantitySold += item.quantity;
-    current.revenue += item.totalPrice;
-  });
-
-  const topProducts = Array.from(productMap.values())
-    .sort((a, b) => b.quantitySold - a.quantitySold)
-    .slice(0, 10);
-
-
-  const lowStockThreshold = 10;
-  const stockAlerts = await prisma.productVariant.findMany({
-    where: {
-      merchantDetailsId: merchantId,
-      quantity: { lte: 50 },
-    },
-    include: {
-      product: true,
-      stockControl: true,
-    },
-    orderBy: { quantity: "asc" },
-  });
-
-  const formattedStockAlerts = stockAlerts
-    .filter((v) => {
-      const threshold = v.stockControl?.reorderPoint ?? 10;
-      return v.quantity <= threshold;
-    })
-    .slice(0, 10)
-    .map((v) => ({
+  // Stock Alerts Processing
+  const stockAlerts = stockAlertsRaw
+    .filter(v => v.quantity <= (v.stockControl?.reorderPoint ?? 10))
+    .map(v => ({
       productId: v.productId,
       variantId: v.id,
       productName: v.product?.productName,
       variantName: v.variantName,
       sku: v.sku,
       quantity: v.quantity,
-      status: v.quantity === 0 ? "Out of Stock" : "Low Stock",
+      status: v.quantity === 0 ? "Out of Stock" : "Low Stock"
     }));
 
   const steadfastBalance = (merchantDetails.steadfastApiKey && merchantDetails.steadfastSecretKey)
     ? await SteadfastService.getBalance({
       apiKey: merchantDetails.steadfastApiKey,
-      secretKey: merchantDetails.steadfastSecretKey,
+      secretKey: merchantDetails.steadfastSecretKey
     })
     : 0;
 
@@ -689,23 +637,25 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     salesTrend,
     topCustomers,
     topProducts,
-    stockAlerts: formattedStockAlerts,
+    stockAlerts,
     approvalStatus: merchantDetails.isVerified ? "Verified" : "Pending",
-    totalOrdersAmount: totalOrdersData._sum.totalPayable || 0,
-    fulfillment: fulfillment.map((f: any) => ({
+    totalOrdersAmount: totalOrdersStats._sum.totalPayable || 0,
+    fulfillment: fulfillmentRaw.map((f: any) => ({
       status: f.status,
       count: f._count.id,
-      amount: f._sum?.totalPayable || 0,
-    })),
+      amount: f._sum?.totalPayable || 0
+    }))
   };
 };
 
-const updateSteadfastConfig = async (userId: string, payload: { apiKey: string, secretKey: string }) => {
+const updateSteadfastConfig = async (userId: string, payload: { apiKey: string, secretKey: string, fraudCheckApiKey?: string, fraudCheckBaseUrl?: string }) => {
   return prisma.merchantDetails.update({
     where: { userId },
     data: {
       steadfastApiKey: payload.apiKey,
       steadfastSecretKey: payload.secretKey,
+      fraudCheckApiKey: payload.fraudCheckApiKey,
+      fraudCheckBaseUrl: payload.fraudCheckBaseUrl,
     },
   });
 };
@@ -716,6 +666,8 @@ const getSteadfastConfig = async (userId: string) => {
     select: {
       steadfastApiKey: true,
       steadfastSecretKey: true,
+      fraudCheckApiKey: true,
+      fraudCheckBaseUrl: true,
     },
   });
   return result;

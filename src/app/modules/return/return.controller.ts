@@ -3,6 +3,7 @@ import httpStatus from "http-status";
 import catchAsync from "../../shared/catchAsync";
 import sendResponse from "../../shared/sendResponse";
 import { ReturnService } from "./return.service";
+import pick from "../../helper/pick";
 
 const createReturn = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
@@ -28,22 +29,26 @@ const updateReturnStatus = catchAsync(async (req: Request, res: Response) => {
 
 const getMerchantReturns = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const result = await ReturnService.getMerchantReturns(user.userId);
+    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);
+    const result = await ReturnService.getMerchantReturns(user.userId, options);
     sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
         message: "Merchant returns fetched successfully",
-        data: result,
+        meta: result.meta,
+        data: result.data,
     });
 });
 
 const getAllReturns = catchAsync(async (req: Request, res: Response) => {
-    const result = await ReturnService.getAllReturns();
+    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);
+    const result = await ReturnService.getAllReturns(options);
     sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
         message: "All returns fetched successfully",
-        data: result,
+        meta: result.meta,
+        data: result.data,
     });
 });
 

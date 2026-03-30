@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import AppError from "../../errorHelper/AppError";
 import { prisma } from "../../shared/prisma";
+import { IOptions, paginationHelper } from "../../helper/paginationHelper";
 
 const createReturn = async (identifier: string, payload: any, isMerchantDetailsId = false, isInternal = false) => {
     let actualMerchantDetailsId: string;
@@ -126,7 +127,9 @@ const updateReturnStatus = async (returnId: string, payload: any) => {
     });
 };
 
-const getMerchantReturns = async (userId: string) => {
+const getMerchantReturns = async (userId: string, options: IOptions) => {
+    const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+
     const merchantDetails = await prisma.merchantDetails.findUnique({
         where: { userId },
     });
@@ -135,7 +138,7 @@ const getMerchantReturns = async (userId: string) => {
         throw new AppError(httpStatus.NOT_FOUND, "Merchant not found");
     }
 
-    return await prisma.returnOrder.findMany({
+    const result = await prisma.returnOrder.findMany({
         where: { merchantDetailsId: merchantDetails.id },
         include: {
             order: true,
@@ -143,6 +146,7 @@ const getMerchantReturns = async (userId: string) => {
                 include: {
                     variant: {
                         include: {
+                            pricing: true,
                             product: {
                                 include: {
                                     productImages: true
@@ -154,11 +158,28 @@ const getMerchantReturns = async (userId: string) => {
             },
             images: true,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
     });
+
+    const total = await prisma.returnOrder.count({
+        where: { merchantDetailsId: merchantDetails.id },
+    });
+
+    return {
+        meta: {
+            total,
+            page,
+            limit,
+        },
+        data: result,
+    };
 };
 
-const getAllReturns = async () => {
+const getAllReturns = async (options: IOptions) => {
+    const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+
     try {
         const result = await prisma.returnOrder.findMany({
             include: {
@@ -173,6 +194,7 @@ const getAllReturns = async () => {
                     include: {
                         variant: {
                             include: {
+                                pricing: true,
                                 product: {
                                     include: {
                                         productImages: true
@@ -184,10 +206,21 @@ const getAllReturns = async () => {
                 },
                 images: true,
             },
-            orderBy: { createdAt: "desc" },
+            orderBy: { [sortBy]: sortOrder },
+            skip,
+            take: limit,
         });
-        console.log("BACKEND: Fetched all returns, count:", result.length);
-        return result;
+
+        const total = await prisma.returnOrder.count();
+
+        return {
+            meta: {
+                total,
+                page,
+                limit,
+            },
+            data: result,
+        };
     } catch (error) {
         console.error("BACKEND ERROR in getAllReturns:", error);
         throw error;

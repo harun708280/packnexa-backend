@@ -8,7 +8,6 @@ export const requireRole =
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      console.log(`Checking role: user.role=${req.user.role}, requiredRoles=${roles}`);
       if (!roles.includes(req.user.role)) {
         return res
           .status(403)

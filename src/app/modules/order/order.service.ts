@@ -130,25 +130,29 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
-    const where: any = { merchantDetailsId: merchantDetails.id };
+    const where: any = { AND: [{ merchantDetailsId: merchantDetails.id }] };
     if (status && status !== "ALL") {
         if (status === "PREBOOKING") {
-            where.OR = [
-                { isPreBooking: true },
-                { preBookingDate: { not: null } }
-            ];
+            where.AND.push({
+                OR: [
+                    { isPreBooking: true },
+                    { preBookingDate: { not: null } }
+                ]
+            });
         } else {
-            where.status = status;
+            where.AND.push({ status: status });
         }
     }
 
     if (searchTerm) {
-        where.OR = [
-            { orderNumber: { contains: searchTerm, mode: "insensitive" } },
-            { trackingNumber: { contains: searchTerm, mode: "insensitive" } },
-            { customerName: { contains: searchTerm, mode: "insensitive" } },
-            { customerPhone: { contains: searchTerm, mode: "insensitive" } },
-        ];
+        where.AND.push({
+            OR: [
+                { orderNumber: { contains: searchTerm, mode: "insensitive" } },
+                { trackingNumber: { contains: searchTerm, mode: "insensitive" } },
+                { customerName: { contains: searchTerm, mode: "insensitive" } },
+                { customerPhone: { contains: searchTerm, mode: "insensitive" } },
+            ]
+        });
     }
 
 
@@ -212,18 +216,20 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
-    const where: any = {};
+    const where: any = { AND: [] };
     if (status && status !== "ALL") {
-        where.status = status;
+        where.AND.push({ status: status });
     }
 
     if (searchTerm) {
-        where.OR = [
-            { orderNumber: { contains: searchTerm, mode: "insensitive" } },
-            { trackingNumber: { contains: searchTerm, mode: "insensitive" } },
-            { customerName: { contains: searchTerm, mode: "insensitive" } },
-            { customerPhone: { contains: searchTerm, mode: "insensitive" } },
-        ];
+        where.AND.push({
+            OR: [
+                { orderNumber: { contains: searchTerm, mode: "insensitive" } },
+                { trackingNumber: { contains: searchTerm, mode: "insensitive" } },
+                { customerName: { contains: searchTerm, mode: "insensitive" } },
+                { customerPhone: { contains: searchTerm, mode: "insensitive" } },
+            ]
+        });
     }
 
 
@@ -312,13 +318,30 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         throw new Error(`Invalid transition. Only PACKED orders can be marked as SHIPPED. Current status: ${existingOrder.status}`);
     }
 
+    if (payload.status === OrderStatus.PACKED && existingOrder.status !== OrderStatus.APPROVED) {
+        throw new Error(`Invalid transition. Order "${existingOrder.orderNumber}" must be APPROVED by Merchant before it can be marked as PACKED. Current status: ${existingOrder.status}`);
+    }
+
+    if (payload.status === OrderStatus.APPROVED) {
+        for (const item of existingOrder.items) {
+            const variant = await prisma.productVariant.findUnique({
+                where: { id: item.variantId },
+                select: { quantity: true, variantName: true }
+            });
+
+            if (!variant || variant.quantity < item.quantity) {
+                throw new Error(`Cannot Confirm Order. Insufficient stock for "${variant?.variantName || 'unknown item'}". Available: ${variant?.quantity || 0}, Requested: ${item.quantity}`);
+            }
+        }
+    }
+
 
     if (payload.status === OrderStatus.CANCELLED && existingOrder.status === OrderStatus.SHIPPED) {
         throw new Error(`Order ${existingOrder.orderNumber} is already SHIPPED and cannot be cancelled. Please use RETURNED if the customer rejects it.`);
     }
 
 
-    // HOLD transition rules
+
     if (payload.status === (OrderStatus as any).HOLD) {
         if (!([OrderStatus.PENDING, OrderStatus.APPROVED] as OrderStatus[]).includes(existingOrder.status)) {
             throw new Error(`Order ${existingOrder.orderNumber} cannot be put on HOLD because it is already ${existingOrder.status}`);
@@ -439,7 +462,6 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         result.preferredCourier?.toLowerCase().includes("system automatic") ||
         !result.preferredCourier;
 
-    console.log(`[DEBUG] Steadfast Trigger Check for ${result.orderNumber}: isTargetingShipped=${isTargetingShipped}, isSteadfastCourier=${isSteadfastCourier}, preferredCourier="${result.preferredCourier}"`);
 
     if (isTargetingShipped && isSteadfastCourier) {
         console.log(`[DEBUG] Triggering Steadfast API for order ${result.orderNumber}`);
@@ -574,7 +596,7 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
     const { items, ...orderData } = payload;
 
     const result = await prisma.$transaction(async (tx) => {
-        // Order is PENDING, no inventory deducted yet.
+
         await tx.orderItem.deleteMany({ where: { orderId } });
 
         let subtotal = 0;
@@ -636,7 +658,7 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
 
 const deleteOrder = async (orderId: string) => {
     return await prisma.$transaction(async (tx) => {
-        // Delete related ReturnOrder if exists
+
         await tx.returnOrder.deleteMany({
             where: { orderId: orderId }
         });
@@ -651,7 +673,6 @@ const deleteOrder = async (orderId: string) => {
 const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: OrderStatus; adminNote?: string }) => {
     const { orderIds, status, adminNote } = payload;
 
-    // Fetch all relevant orders
     const orders = await prisma.order.findMany({
         where: { id: { in: orderIds } },
         include: { items: true }
@@ -668,32 +689,30 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
         errors: [] as string[]
     };
 
-    // Filter valid orders based on target status
     let validOrders = orders;
 
     if (status === OrderStatus.SHIPPED) {
-        // Only PACKED orders can be marked as SHIPPED (Dispatched)
         validOrders = orders.filter(o => o.status === OrderStatus.PACKED);
     } else if (status === OrderStatus.PACKED) {
-        // Typically APPROVED or PENDING orders can be PACKED
-        validOrders = orders.filter(o => ([OrderStatus.APPROVED, OrderStatus.PENDING] as OrderStatus[]).includes(o.status));
+
+        validOrders = orders.filter(o => o.status === OrderStatus.APPROVED);
     } else if (status === (OrderStatus as any).HOLD) {
-        // Only PENDING or APPROVED orders can be HOLD
+
         validOrders = orders.filter(o => ([OrderStatus.PENDING, OrderStatus.APPROVED] as OrderStatus[]).includes(o.status));
     } else if (status === OrderStatus.APPROVED) {
-        // PENDING or HOLD orders can be APPROVED
+
         validOrders = orders.filter(o => ([OrderStatus.PENDING, (OrderStatus as any).HOLD] as OrderStatus[]).includes(o.status));
     } else if (status === OrderStatus.CANCELLED) {
-        // Can't cancel SHIPPED or DELIVERED orders via bulk. HOLD orders CAN be cancelled.
+
         validOrders = orders.filter(o => !([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.RETURNED] as OrderStatus[]).includes(o.status));
     } else if (status === OrderStatus.RETURNED) {
-        // Usually only SHIPPED orders are RETURNED
+
         validOrders = orders.filter(o => ([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.PACKED] as OrderStatus[]).includes(o.status));
     }
 
     results.skipped = orders.length - validOrders.length;
 
-    // Process each valid order individually for granular success/failure
+
     for (const order of validOrders) {
         try {
             await updateOrderStatus(order.id, { status, adminNote }, false);
@@ -709,12 +728,12 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
 
 const bulkDeleteOrders = async (orderIds: string[]) => {
     return await prisma.$transaction(async (tx) => {
-        // Delete related ReturnOrders first to avoid foreign key constraint violations
+
         await tx.returnOrder.deleteMany({
             where: { orderId: { in: orderIds } }
         });
 
-        // Now delete the orders (OrderItems will cascade delete via schema)
+
         const result = await tx.order.deleteMany({
             where: { id: { in: orderIds } }
         });
@@ -764,7 +783,6 @@ const getOrderStats = async (userId: string) => {
         return acc;
     }, {});
 
-    // Manually add PREBOOKING count to statusStats for easier frontend access
     stats.PREBOOKING = preBookingCount;
 
     return {

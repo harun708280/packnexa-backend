@@ -530,7 +530,7 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
 
   const totalSalesData = await prisma.order.aggregate({
     where: {
-      merchantDetailsId: merchantId,
+      ...whereCondition,
       status: "DELIVERED",
     },
     _sum: { totalPayable: true },
@@ -578,7 +578,7 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
 
 
   const orders = await prisma.order.findMany({
-    where: { merchantDetailsId: merchantId },
+    where: whereCondition,
     select: {
       customerName: true,
       customerEmail: true,
@@ -594,6 +594,7 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
       customerMap.set(identifier, {
         name: order.customerName,
         email: order.customerEmail,
+        phoneNumber: order.customerPhone,
         orderCount: 0,
         totalSpent: 0,
       });
@@ -609,7 +610,7 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
 
 
   const orderItems = await prisma.orderItem.findMany({
-    where: { order: { merchantDetailsId: merchantId } },
+    where: { order: whereCondition },
     include: {
       variant: {
         include: {

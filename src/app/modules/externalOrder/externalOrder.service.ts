@@ -181,7 +181,10 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
 
 const getExternalLogs = async (merchantDetailsId: string) => {
     return await prisma.externalOrderLog.findMany({
-        where: { merchantDetailsId },
+        where: {
+            merchantDetailsId,
+            status: { not: "COMPLETED" }
+        },
         orderBy: { createdAt: "desc" },
     });
 };

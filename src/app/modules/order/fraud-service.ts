@@ -4,11 +4,7 @@ export class FraudService {
     private static API_KEY = process.env.FRAUD_CHECK_API_KEY;
     private static BASE_URL = process.env.FRAUD_CHECK_BASE_URL;
 
-    /**
-     * Checks customer reliability from an external fraud detection service (FraudBD/CheckParcel style).
-     * @param phone The customer's phone number.
-     * @returns Aggregated statistics about the customer's order history across the network.
-     */
+
     static async checkExternalFraud(phone: string) {
         if (!this.API_KEY || this.API_KEY === "your_api_key_here") {
             console.warn("[FRAUD_CHECK] API Key is not configured. Returning mock/empty data.");
@@ -20,10 +16,7 @@ export class FraudService {
         }
 
         try {
-            // Updated to match FraudBD official documentation:
-            // Method: POST
-            // Header: api_key
-            // Body: { phone_number: "..." }
+
             const response = await axios.post(this.BASE_URL as string,
                 { phone_number: phone },
                 {

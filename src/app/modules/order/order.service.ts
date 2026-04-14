@@ -180,6 +180,7 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
                 select: {
                     id: true,
                     variantName: true,
+                    weightKg: true,
                     sku: true,
                     product: {
                         select: {
@@ -259,6 +260,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
                     select: {
                         id: true,
                         variantName: true,
+                        weightKg: true,
                         sku: true,
                         variantImage: true,
                     }
@@ -481,9 +483,10 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
                         where: { id: orderId },
                         data: {
                             trackingNumber: steadfastResponse.consignment.tracking_code,
+                            consignmentId: steadfastResponse.consignment.consignment_id.toString(),
                         },
                     });
-                    console.log(`Order ${result.orderNumber} successfully sent to Steadfast. Tracking: ${steadfastResponse.consignment.tracking_code}`);
+                    console.log(`Order ${result.orderNumber} successfully sent to Steadfast. Tracking: ${steadfastResponse.consignment.tracking_code}, Consignment ID: ${steadfastResponse.consignment.consignment_id}`);
                 } else {
                     console.warn(`Steadfast API returned error for order ${result.orderNumber}:`, steadfastResponse);
                 }
@@ -657,6 +660,15 @@ const updateOrder = async (userId: string, orderId: string, payload: any) => {
 };
 
 const deleteOrder = async (orderId: string) => {
+    const existingOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { orderNumber: true, consignmentId: true, trackingNumber: true }
+    });
+
+    if (existingOrder && (existingOrder.consignmentId || (existingOrder.trackingNumber && !existingOrder.trackingNumber.startsWith('PN-')))) {
+        throw new Error(`Order ${existingOrder.orderNumber} cannot be deleted because it has already been sent to the courier (Steadfast).`);
+    }
+
     return await prisma.$transaction(async (tx) => {
 
         await tx.returnOrder.deleteMany({
@@ -712,8 +724,84 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
 
     results.skipped = orders.length - validOrders.length;
 
+    // Separate orders by courier
+    const steadfastOrders = validOrders.filter(o => 
+        (status === OrderStatus.SHIPPED) && 
+        (o.preferredCourier?.toLowerCase().includes("steadfast") || !o.preferredCourier || o.preferredCourier.toLowerCase().includes("system automatic"))
+    );
+    const otherOrders = validOrders.filter(o => !steadfastOrders.includes(o));
 
-    for (const order of validOrders) {
+    // Handle Steadfast batch if any
+    if (steadfastOrders.length > 0) {
+        console.log(`[DEBUG] Triggering Steadfast BULK API for ${steadfastOrders.length} orders`);
+        // We'll process them one by one for now to keep the same updateOrderStatus logic which has inventory etc.
+        // OR we can do a proper bulk call. Let's try bulk call for Steadfast as requested.
+        
+        // Group by merchant since each merchant has different API keys
+        const merchantGrouped = new Map<string, typeof steadfastOrders>();
+        for (const o of steadfastOrders) {
+            const mId = o.merchantDetailsId;
+            if (!merchantGrouped.has(mId)) merchantGrouped.set(mId, []);
+            merchantGrouped.get(mId)!.push(o);
+        }
+
+        for (const [merchantId, mOrders] of merchantGrouped.entries()) {
+            try {
+                const merchantKeys = await prisma.merchantDetails.findUnique({
+                    where: { id: merchantId },
+                    select: { steadfastApiKey: true, steadfastSecretKey: true }
+                });
+
+                if (merchantKeys?.steadfastApiKey && merchantKeys?.steadfastSecretKey) {
+                    const bulkResponse = await SteadfastService.bulkCreate(mOrders, {
+                        apiKey: merchantKeys.steadfastApiKey,
+                        secretKey: merchantKeys.steadfastSecretKey
+                    });
+
+                    if (bulkResponse && Array.isArray(bulkResponse)) {
+                        for (const order of mOrders) {
+                            const res = bulkResponse.find(r => r.invoice === order.orderNumber);
+                            if (res && res.status === 'success') {
+                                try {
+                                    // Update each order using the single status update logic to handle inventory and status
+                                    await updateOrderStatus(order.id, { status, adminNote }, false);
+                                    
+                                    // Specifically update the IDs from Steadfast
+                                    await prisma.order.update({
+                                        where: { id: order.id },
+                                        data: {
+                                            trackingNumber: res.tracking_code,
+                                            consignmentId: res.consignment_id.toString()
+                                        }
+                                    });
+                                    results.success++;
+                                } catch (err: any) {
+                                    results.failed++;
+                                    results.errors.push(`Order ${order.orderNumber}: ${err.message}`);
+                                }
+                            } else {
+                                results.failed++;
+                                results.errors.push(`Order ${order.orderNumber}: Steadfast failed - ${res?.status || 'Unknown error'}`);
+                            }
+                        }
+                    } else {
+                        // If bulk fails, try individually or fail all
+                        results.failed += mOrders.length;
+                        results.errors.push(`Bulk request failed for merchant ${merchantId}`);
+                    }
+                } else {
+                    results.failed += mOrders.length;
+                    results.errors.push(`Merchant ${merchantId} has no Steadfast keys`);
+                }
+            } catch (error: any) {
+                results.failed += mOrders.length;
+                results.errors.push(`Fatal error in bulk dispatch: ${error.message}`);
+            }
+        }
+    }
+
+    // Handle other orders individually
+    for (const order of otherOrders) {
         try {
             await updateOrderStatus(order.id, { status, adminNote }, false);
             results.success++;

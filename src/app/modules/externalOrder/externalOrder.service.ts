@@ -97,7 +97,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
         console.log(`[SYNC-DEBUG] All items matched successfully for order ${payload.id}. Entering transaction.`);
 
         const resultOrder = await prisma.$transaction(async (tx) => {
-            const orderNumber = `WP-${payload.id}`;
+            const orderNumber = `PN-WP-${payload.id}`;
 
             const existingOrder = await tx.order.findUnique({
                 where: { orderNumber },

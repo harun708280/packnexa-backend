@@ -32,6 +32,18 @@ interface SteadfastStatusResponse {
     tracking_code?: string;
 }
 
+interface SteadfastBulkOrderResponse {
+    invoice: string;
+    recipient_name: string;
+    recipient_phone: string;
+    recipient_address: string;
+    cod_amount: string | number;
+    note: string | null;
+    consignment_id: number;
+    tracking_code: string;
+    status: string;
+}
+
 const createOrder = async (order: Order, merchantCredentials?: { apiKey?: string | null, secretKey?: string | null }): Promise<SteadfastOrderResponse | null> => {
     const apiKey = merchantCredentials?.apiKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
     const secretKey = merchantCredentials?.secretKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
@@ -147,8 +159,58 @@ const trackOrder = async (invoice: string, merchantCredentials?: { apiKey?: stri
     }
 };
 
+const bulkCreate = async (orders: Order[], merchantCredentials?: { apiKey?: string | null, secretKey?: string | null }): Promise<SteadfastBulkOrderResponse[] | null> => {
+    const apiKey = merchantCredentials?.apiKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
+    const secretKey = merchantCredentials?.secretKey?.toString().trim().replace(/^["'](.+)["']$/, '$1');
+
+    if (!apiKey || !secretKey) {
+        return null;
+    }
+
+    const payloadData = orders.map(order => ({
+        invoice: order.orderNumber,
+        recipient_name: order.customerName.slice(0, 100),
+        recipient_phone: order.customerPhone.replace(/[^0-9]/g, "").slice(-11),
+        recipient_address: `${order.deliveryAddress}, ${order.area}, ${order.district}`.slice(0, 250),
+        recipient_email: order.customerEmail || "",
+        cod_amount: (() => {
+            const method = (order.paymentMethod || "COD").toUpperCase();
+            if (method.includes("COD") || method.includes("CASH") || method.includes("HAND") || method === "PAY ON DELIVERY") {
+                return order.totalPayable;
+            }
+            return 0;
+        })(),
+        note: (order.merchantNote || "").slice(0, 500),
+    }));
+
+    try {
+        const response = await fetch(`${STEADFAST_BASE_URL}/create_order/bulk-order`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Api-Key": apiKey,
+                "Secret-Key": secretKey,
+            },
+            body: JSON.stringify({ data: payloadData }),
+        });
+
+        const text = await response.text();
+        try {
+            const result = JSON.parse(text) as SteadfastBulkOrderResponse[];
+            return result;
+        } catch (e) {
+            console.error(`Failed to parse Steadfast bulk order response. Raw text: ${text}`);
+            return null;
+        }
+    } catch (error) {
+        console.error("Error creating Steadfast bulk orders:", error);
+        return null;
+    }
+};
+
 export const SteadfastService = {
     createOrder,
     trackOrder,
     getBalance,
+    bulkCreate,
 };

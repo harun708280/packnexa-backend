@@ -24,6 +24,7 @@ model Order {
   preBookingDate    DateTime?
   zipCode           String?
   trackingNumber    String?         @unique
+  consignmentId     String?         @unique
   alternativePhone  String?
   items             OrderItem[]
   merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])

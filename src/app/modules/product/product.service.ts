@@ -247,6 +247,9 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
             quantity: true,
             sku: true,
             variantImage: true,
+            weightKg: true,
+            color: true,
+            size: true,
             pricing: {
               select: {
                 salePrice: true

@@ -80,7 +80,7 @@ const updateOrder = catchAsync(async (req: Request, res: Response) => {
 const getSingleOrder = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { id } = req.params;
-    const result = await OrderService.getSingleOrder(user.userId, id);
+    const result = await OrderService.getSingleOrder(user.userId, user.role, id);
 
     sendResponse(res, {
         statusCode: 200,
@@ -92,7 +92,8 @@ const getSingleOrder = catchAsync(async (req: Request, res: Response) => {
 
 const getOrderStats = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const result = await OrderService.getOrderStats(user.userId);
+    const { merchantId } = req.query as any;
+    const result = await OrderService.getOrderStats(user, merchantId);
 
     sendResponse(res, {
         statusCode: 200,

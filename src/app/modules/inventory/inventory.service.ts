@@ -83,6 +83,8 @@ export const listProductsService = async (
         data: []
       };
       where.merchantDetailsId = merchant.id;
+    } else if (isAdmin && options.merchantId) {
+      where.merchantDetailsId = options.merchantId;
     }
     if (pending) where.status = "PROCESSING";
 

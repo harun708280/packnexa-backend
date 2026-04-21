@@ -56,7 +56,7 @@ export const deleteProduct = catchAsync(async (req: Request, res: Response) => {
 export const listProducts = catchAsync(async (req: Request, res: Response) => {
   const merchantId = (req as any).user.userId;
   const isAdmin = (req as any).user.role === "ADMIN";
-  const paginationOptions = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder', 'searchTerm']);
+  const paginationOptions = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder', 'searchTerm', 'merchantId']);
   const pending = req.query.pending === "true";
 
   const result = await listProductsService(merchantId, isAdmin, paginationOptions, pending);

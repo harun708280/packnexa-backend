@@ -213,14 +213,28 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
     };
 };
 
-const getAllOrders = async (query: { page?: string; limit?: string; status?: string; searchTerm?: string } = {}) => {
-    const { page = "1", limit = "10", status, searchTerm } = query;
+const getAllOrders = async (query: { page?: string; limit?: string; status?: string; searchTerm?: string; merchantId?: string } = {}) => {
+    const { page = "1", limit = "10", status, searchTerm, merchantId } = query;
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
     const where: any = { AND: [] };
+
+    if (merchantId) {
+        where.AND.push({ merchantDetailsId: merchantId });
+    }
+
     if (status && status !== "ALL") {
-        where.AND.push({ status: status });
+        if (status === "PREBOOKING") {
+            where.AND.push({
+                OR: [
+                    { isPreBooking: true },
+                    { preBookingDate: { not: null } }
+                ]
+            });
+        } else {
+            where.AND.push({ status: status });
+        }
     }
 
     if (searchTerm) {
@@ -527,17 +541,23 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
     });
 };
 
-const getSingleOrder = async (userId: string, orderId: string) => {
-    const merchantDetails = await prisma.merchantDetails.findUnique({
-        where: { userId },
-    });
+const getSingleOrder = async (userId: string, role: string, orderId: string) => {
+    const isMerchant = role === "MERCHANT";
+    const where: any = { id: orderId };
 
-    if (!merchantDetails) {
-        throw new Error("Merchant details not found");
+    if (isMerchant) {
+        const merchantDetails = await prisma.merchantDetails.findUnique({
+            where: { userId },
+        });
+
+        if (!merchantDetails) {
+            throw new Error("Merchant details not found");
+        }
+        where.merchantDetailsId = merchantDetails.id;
     }
 
     const order = await prisma.order.findFirst({
-        where: { id: orderId, merchantDetailsId: merchantDetails.id },
+        where,
         include: {
             items: {
                 include: {
@@ -831,35 +851,41 @@ const bulkDeleteOrders = async (orderIds: string[]) => {
     });
 };
 
-const getOrderStats = async (userId: string) => {
-    const merchantDetails = await prisma.merchantDetails.findUnique({
-        where: { userId },
-    });
+const getOrderStats = async (user: { userId: string; role: string }, merchantId?: string) => {
+    let targetMerchantId = merchantId;
 
-    if (!merchantDetails) {
-        throw new Error("Merchant details not found");
+    if (user.role === "MERCHANT") {
+        const merchantDetails = await prisma.merchantDetails.findUnique({
+            where: { userId: user.userId },
+        });
+        if (!merchantDetails) throw new Error("Merchant not found");
+        targetMerchantId = merchantDetails.id;
     }
 
-    const [sourceStats, statusStats, externalLogCount, preBookingCount] = await Promise.all([
+    if (!targetMerchantId) {
+        throw new Error("Merchant ID is required for statistics");
+    }
+
+    const [sourceStatsRaw, statusStatsRaw, externalLogCount, preBookingCount] = await Promise.all([
         prisma.order.groupBy({
             by: ["orderSource"],
-            where: { merchantDetailsId: merchantDetails.id },
-            _count: true,
+            where: { merchantDetailsId: targetMerchantId },
+            _count: { id: true },
         }),
         prisma.order.groupBy({
             by: ["status"],
-            where: { merchantDetailsId: merchantDetails.id },
-            _count: true,
+            where: { merchantDetailsId: targetMerchantId },
+            _count: { id: true },
         }),
         prisma.externalOrderLog.count({
             where: {
-                merchantDetailsId: merchantDetails.id,
+                merchantDetailsId: targetMerchantId,
                 status: { not: "COMPLETED" },
             },
         }),
         prisma.order.count({
             where: {
-                merchantDetailsId: merchantDetails.id,
+                merchantDetailsId: targetMerchantId,
                 OR: [
                     { isPreBooking: true },
                     { preBookingDate: { not: null } }
@@ -868,19 +894,22 @@ const getOrderStats = async (userId: string) => {
         }),
     ]);
 
-    const stats = statusStats.reduce((acc: any, curr) => {
-        acc[curr.status] = curr._count;
-        return acc;
-    }, {});
+    const statusStats: Record<string, number> = {};
+    statusStatsRaw.forEach((curr: any) => {
+        statusStats[curr.status] = curr._count.id;
+    });
 
-    stats.PREBOOKING = preBookingCount;
+    // Manually add PREBOOKING to the status stats for the UI tabs
+    statusStats.PREBOOKING = preBookingCount;
+
+    const sourceStats: Record<string, number> = {};
+    sourceStatsRaw.forEach((curr: any) => {
+        sourceStats[curr.orderSource] = curr._count.id;
+    });
 
     return {
-        sourceStats: sourceStats.reduce((acc: any, curr) => {
-            acc[curr.orderSource] = curr._count;
-            return acc;
-        }, {}),
-        statusStats: stats,
+        sourceStats,
+        statusStats,
         externalLogCount,
         preBookingCount,
     };

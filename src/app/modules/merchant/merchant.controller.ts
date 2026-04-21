@@ -3,20 +3,23 @@ import catchAsync from "../../shared/catchAsync";
 import { prisma } from "../../shared/prisma";
 import sendResponse from "../../shared/sendResponse";
 import { MerchantService } from "./merchant.service";
+import { fileUploader } from "../../helper/fileUploader";
 
 const personalDetails = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const file = req.file;
 
+  let profilePhoto = undefined;
+  if (file) {
+    const uploadResult = await fileUploader.uploadToCloudinary(file);
+    profilePhoto = uploadResult?.secure_url;
+  }
+
   const payload = {
     ...req.body,
     userId: user.userId,
-    profilePhoto: file?.path ? file.path.split("uploads/").pop() : undefined,
+    profilePhoto,
   };
-
-  if (payload.profilePhoto) {
-    payload.profilePhoto = `uploads/${payload.profilePhoto}`;
-  }
 
   const result = await MerchantService.personalDetails(payload);
 
@@ -44,15 +47,17 @@ const businessDetails = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const file = req.file;
 
+  let businessLogo = undefined;
+  if (file) {
+    const uploadResult = await fileUploader.uploadToCloudinary(file);
+    businessLogo = uploadResult?.secure_url;
+  }
+
   const payload = {
     ...req.body,
     userId: user.userId,
-    businessLogo: file?.path ? file.path.split("uploads/").pop() : undefined,
+    businessLogo,
   };
-
-  if (payload.businessLogo) {
-    payload.businessLogo = `uploads/${payload.businessLogo}`;
-  }
 
   const result = await MerchantService.businessDetails(payload);
 
@@ -83,11 +88,12 @@ const documents = catchAsync(async (req: Request, res: Response) => {
   const docsPayload: any = { userId: user.userId };
 
   if (files) {
-    Object.keys(files).forEach((key) => {
-      const filePath = files[key][0].path;
-      const relativePath = filePath.split("uploads/").pop();
-      docsPayload[key] = `uploads/${relativePath}`;
+    const uploadPromises = Object.keys(files).map(async (key) => {
+      const file = files[key][0];
+      const uploadResult = await fileUploader.uploadToCloudinary(file);
+      docsPayload[key] = uploadResult?.secure_url;
     });
+    await Promise.all(uploadPromises);
   }
 
   const result = await MerchantService.documents(docsPayload);

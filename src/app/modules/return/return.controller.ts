@@ -29,7 +29,7 @@ const updateReturnStatus = catchAsync(async (req: Request, res: Response) => {
 
 const getMerchantReturns = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);
+    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder", "searchTerm"]);
     const result = await ReturnService.getMerchantReturns(user.userId, options);
     sendResponse(res, {
         statusCode: httpStatus.OK,
@@ -41,7 +41,7 @@ const getMerchantReturns = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllReturns = catchAsync(async (req: Request, res: Response) => {
-    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);
+    const options = pick(req.query, ["page", "limit", "sortBy", "sortOrder", "searchTerm"]);
     const result = await ReturnService.getAllReturns(options);
     sendResponse(res, {
         statusCode: httpStatus.OK,

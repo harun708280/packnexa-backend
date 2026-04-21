@@ -1,4 +1,5 @@
 import { prisma } from "../../shared/prisma";
+import { paginationHelper } from "../../helper/paginationHelper";
 
 export const addProductService = async (userId: string, data: any) => {
   try {
@@ -65,18 +66,42 @@ export const deleteProductService = async (
 export const listProductsService = async (
   userId: string | null,
   isAdmin: boolean,
+  options: any,
   pending?: boolean
 ) => {
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+  const { searchTerm } = options;
+
   try {
     const where: any = {};
     if (!isAdmin && userId) {
       const merchant = await prisma.merchantDetails.findUnique({
         where: { userId },
       });
-      if (!merchant) return [];
+      if (!merchant) return {
+        meta: { page, limit, total: 0 },
+        data: []
+      };
       where.merchantDetailsId = merchant.id;
     }
     if (pending) where.status = "PROCESSING";
+
+    if (searchTerm) {
+      where.OR = [
+        { productName: { contains: searchTerm, mode: "insensitive" } },
+        { id: { contains: searchTerm, mode: "insensitive" } },
+        {
+          variants: {
+            some: {
+              OR: [
+                { variantName: { contains: searchTerm, mode: "insensitive" } },
+                { sku: { contains: searchTerm, mode: "insensitive" } }
+              ]
+            }
+          }
+        }
+      ];
+    }
 
     const products = await prisma.product.findMany({
       where,
@@ -92,9 +117,21 @@ export const listProductsService = async (
           }
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: sortBy && sortOrder ? { [sortBy]: sortOrder } : { createdAt: "desc" },
+      skip,
+      take: limit
     });
-    return products;
+
+    const total = await prisma.product.count({ where });
+
+    return {
+      meta: {
+        page,
+        limit,
+        total
+      },
+      data: products
+    };
   } catch (error) {
     throw new Error("Failed to fetch products");
   }

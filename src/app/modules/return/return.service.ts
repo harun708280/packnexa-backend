@@ -127,8 +127,9 @@ const updateReturnStatus = async (returnId: string, payload: any) => {
     });
 };
 
-const getMerchantReturns = async (userId: string, options: IOptions) => {
+const getMerchantReturns = async (userId: string, options: any) => {
     const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+    const { searchTerm } = options;
 
     const merchantDetails = await prisma.merchantDetails.findUnique({
         where: { userId },
@@ -138,8 +139,27 @@ const getMerchantReturns = async (userId: string, options: IOptions) => {
         throw new AppError(httpStatus.NOT_FOUND, "Merchant not found");
     }
 
+    const where: any = {
+        merchantDetailsId: merchantDetails.id,
+    };
+
+    if (searchTerm) {
+        where.OR = [
+            { id: { contains: searchTerm, mode: "insensitive" } },
+            {
+                order: {
+                    OR: [
+                        { orderNumber: { contains: searchTerm, mode: "insensitive" } },
+                        { customerName: { contains: searchTerm, mode: "insensitive" } },
+                        { customerPhone: { contains: searchTerm, mode: "insensitive" } },
+                    ],
+                },
+            },
+        ];
+    }
+
     const result = await prisma.returnOrder.findMany({
-        where: { merchantDetailsId: merchantDetails.id },
+        where,
         include: {
             order: true,
             items: {
@@ -164,7 +184,7 @@ const getMerchantReturns = async (userId: string, options: IOptions) => {
     });
 
     const total = await prisma.returnOrder.count({
-        where: { merchantDetailsId: merchantDetails.id },
+        where,
     });
 
     return {
@@ -177,11 +197,30 @@ const getMerchantReturns = async (userId: string, options: IOptions) => {
     };
 };
 
-const getAllReturns = async (options: IOptions) => {
+const getAllReturns = async (options: any) => {
     const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+    const { searchTerm } = options;
 
     try {
+        const where: any = {};
+
+        if (searchTerm) {
+            where.OR = [
+                { id: { contains: searchTerm, mode: "insensitive" } },
+                {
+                    order: {
+                        OR: [
+                            { orderNumber: { contains: searchTerm, mode: "insensitive" } },
+                            { customerName: { contains: searchTerm, mode: "insensitive" } },
+                            { customerPhone: { contains: searchTerm, mode: "insensitive" } },
+                        ],
+                    },
+                },
+            ];
+        }
+
         const result = await prisma.returnOrder.findMany({
+            where,
             include: {
                 order: true,
                 merchantDetails: {
@@ -211,7 +250,7 @@ const getAllReturns = async (options: IOptions) => {
             take: limit,
         });
 
-        const total = await prisma.returnOrder.count();
+        const total = await prisma.returnOrder.count({ where });
 
         return {
             meta: {

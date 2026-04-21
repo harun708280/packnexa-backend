@@ -11,7 +11,6 @@ const router = express.Router();
 router.post(
   "/personal-details",
   authMiddleware,
-  checkMerchantNotSubmitted,
   fileUploader.upload.single("profilePhoto"),
 
   MerchantController.personalDetails,
@@ -26,7 +25,6 @@ router.get(
 router.post(
   "/business-details",
   authMiddleware,
-  checkMerchantNotSubmitted,
   fileUploader.upload.single("businessLogo"),
 
   MerchantController.businessDetails,
@@ -41,7 +39,6 @@ router.get(
 router.post(
   "/documents",
   authMiddleware,
-  checkMerchantNotSubmitted,
   fileUploader.upload.fields([
     { name: "nidFront" },
     { name: "nidBack" },
@@ -61,7 +58,6 @@ router.get("/documents", authMiddleware, MerchantController.getDocuments);
 router.post(
   "/payments",
   authMiddleware,
-  checkMerchantNotSubmitted,
   MerchantController.payments,
 );
 

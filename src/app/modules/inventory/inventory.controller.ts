@@ -16,6 +16,7 @@ import {
   rejectStockAdjustmentService,
   getProductService,
 } from "./inventory.service";
+import pick from "../../helper/pick";
 
 
 export const addProduct = catchAsync(async (req: Request, res: Response) => {
@@ -55,15 +56,17 @@ export const deleteProduct = catchAsync(async (req: Request, res: Response) => {
 export const listProducts = catchAsync(async (req: Request, res: Response) => {
   const merchantId = (req as any).user.userId;
   const isAdmin = (req as any).user.role === "ADMIN";
+  const paginationOptions = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder', 'searchTerm']);
   const pending = req.query.pending === "true";
 
-  const products = await listProductsService(merchantId, isAdmin, pending);
+  const result = await listProductsService(merchantId, isAdmin, paginationOptions, pending);
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: "Products fetched",
-    data: products,
+    meta: result.meta,
+    data: result.data,
   });
 });
 

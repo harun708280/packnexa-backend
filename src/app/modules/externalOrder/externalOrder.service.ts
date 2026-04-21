@@ -13,11 +13,11 @@ const sanitizePhoneNumber = (phone: string): string => {
 };
 
 const mapLocationData = (payload: any) => {
-    const district = payload.shipping?.state || payload.billing?.state || "Dhaka";
-    const area = payload.shipping?.city || payload.billing?.city || "Default";
+    const district = payload.shipping?.state || payload.billing?.state || "";
+    const area = payload.shipping?.city || payload.billing?.city || "";
 
     return {
-        district: district === "Dhaka" ? "Dhaka City" : district,
+        district: district,
         area: area
     };
 };
@@ -132,7 +132,7 @@ const syncWordPressOrder = async (merchantDetailsId: string, payload: any, exist
                     customerName: `${payload.billing?.first_name} ${payload.billing?.last_name}`,
                     customerPhone,
                     customerEmail: payload.billing?.email || "",
-                    deliveryAddress: `${payload.shipping?.address_1 || payload.billing?.address_1}, ${area}`,
+                    deliveryAddress: payload.shipping?.address_1 || payload.billing?.address_1 || "",
                     district,
                     area,
                     paymentMethod,

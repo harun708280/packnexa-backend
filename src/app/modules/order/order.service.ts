@@ -199,7 +199,8 @@ const getMyOrders = async (userId: string, query: { page?: string; limit?: strin
 
     const data = orders.map(order => ({
         ...order,
-        items: items.filter(item => item.orderId === order.id)
+        items: items.filter(item => item.orderId === order.id),
+        merchantDetails: merchantDetails
     }));
 
     return {
@@ -276,6 +277,7 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
                         firstName: true,
                         lastName: true,
                         email: true,
+                        contactNumber: true,
                     },
                 },
                 businessDetails: {
@@ -725,8 +727,8 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
     results.skipped = orders.length - validOrders.length;
 
     // Separate orders by courier
-    const steadfastOrders = validOrders.filter(o => 
-        (status === OrderStatus.SHIPPED) && 
+    const steadfastOrders = validOrders.filter(o =>
+        (status === OrderStatus.SHIPPED) &&
         (o.preferredCourier?.toLowerCase().includes("steadfast") || !o.preferredCourier || o.preferredCourier.toLowerCase().includes("system automatic"))
     );
     const otherOrders = validOrders.filter(o => !steadfastOrders.includes(o));
@@ -736,7 +738,7 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
         console.log(`[DEBUG] Triggering Steadfast BULK API for ${steadfastOrders.length} orders`);
         // We'll process them one by one for now to keep the same updateOrderStatus logic which has inventory etc.
         // OR we can do a proper bulk call. Let's try bulk call for Steadfast as requested.
-        
+
         // Group by merchant since each merchant has different API keys
         const merchantGrouped = new Map<string, typeof steadfastOrders>();
         for (const o of steadfastOrders) {
@@ -765,7 +767,7 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
                                 try {
                                     // Update each order using the single status update logic to handle inventory and status
                                     await updateOrderStatus(order.id, { status, adminNote }, false);
-                                    
+
                                     // Specifically update the IDs from Steadfast
                                     await prisma.order.update({
                                         where: { id: order.id },

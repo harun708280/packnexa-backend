@@ -2,6 +2,7 @@ import { OrderStatus } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
 import { SteadfastService } from "./steadfast-service";
 import { FraudService } from "./fraud-service";
+import { BillingService } from "../billing/billing.service";
 
 const createOrder = async (userId: string, payload: any) => {
     const merchantDetails = await prisma.merchantDetails.findUnique({
@@ -15,106 +16,131 @@ const createOrder = async (userId: string, payload: any) => {
     const { items, ...orderData } = payload;
     console.log("Creating order with payload:", JSON.stringify(payload, null, 2));
 
-    const result = await prisma.$transaction(async (tx) => {
+    const MAX_RETRIES = 5;
+    let attempt = 0;
 
-        const now = new Date();
-        const dateStr = now.toISOString().slice(2, 10).replace(/-/g, "");
+    while (attempt < MAX_RETRIES) {
+        try {
+            const result = await prisma.$transaction(async (tx) => {
+                // Local date handling for day boundaries and orderNumber
+                const localNow = new Date();
+                const year = localNow.getFullYear().toString().slice(-2);
+                const month = (localNow.getMonth() + 1).toString().padStart(2, '0');
+                const day = localNow.getDate().toString().padStart(2, '0');
+                const dateStr = `${year}${month}${day}`;
 
+                const startOfDay = new Date(new Date(localNow).setHours(0, 0, 0, 0));
+                const endOfDay = new Date(new Date(localNow).setHours(23, 59, 59, 999));
 
-        const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
-        const endOfDay = new Date(new Date().setHours(23, 59, 59, 999));
+                console.log(`[Attempt ${attempt + 1}] Date Details: localNow=${localNow.toLocaleString()}, dateStr=${dateStr}, start=${startOfDay.toISOString()}, end=${endOfDay.toISOString()}`);
 
-        const lastOrderToday = await tx.order.findFirst({
-            where: {
-                createdAt: {
-                    gte: startOfDay,
-                    lte: endOfDay,
-                },
-                orderNumber: {
-                    startsWith: `PN-${dateStr}-`,
-                },
-            },
-            orderBy: {
-                orderNumber: "desc",
-            },
-        });
+                const lastOrderToday = await tx.order.findFirst({
+                    where: {
+                        createdAt: {
+                            gte: startOfDay,
+                            lte: endOfDay,
+                        },
+                        orderNumber: {
+                            startsWith: `PN-${dateStr}-`,
+                        },
+                    },
+                    orderBy: {
+                        orderNumber: "desc",
+                    },
+                });
 
-        let nextSequence = 1;
-        if (lastOrderToday && lastOrderToday.orderNumber) {
-            const lastSeqParts = lastOrderToday.orderNumber.split("-");
-            if (lastSeqParts.length === 3) {
-                const lastSeq = parseInt(lastSeqParts[2], 10);
-                if (!isNaN(lastSeq)) {
-                    nextSequence = lastSeq + 1;
+                console.log(`[Attempt ${attempt + 1}] Last order found: ${lastOrderToday ? lastOrderToday.orderNumber : 'none'}`);
+
+                let nextSequence = 1;
+                if (lastOrderToday && lastOrderToday.orderNumber) {
+                    const lastSeqParts = lastOrderToday.orderNumber.split("-");
+                    if (lastSeqParts.length === 3) {
+                        const lastSeq = parseInt(lastSeqParts[2], 10);
+                        if (!isNaN(lastSeq)) {
+                            nextSequence = lastSeq + 1;
+                        }
+                    }
                 }
-            }
-        }
 
-        const sequence = nextSequence.toString().padStart(4, "0");
-        const orderNumber = `PN-${dateStr}-${sequence}`;
+                const sequence = nextSequence.toString().padStart(4, "0");
+                const orderNumber = `PN-${dateStr}-${sequence}`;
 
+                console.log(`[Attempt ${attempt + 1}] Final generated: ${orderNumber}`);
 
-        const trackingNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
+                const trackingNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
 
+                let subtotal = 0;
+                for (const item of items) {
+                    subtotal += item.quantity * item.unitPrice;
+                }
 
-        let subtotal = 0;
-        for (const item of items) {
-            subtotal += item.quantity * item.unitPrice;
-        }
+                const deliveryCharge = orderData.deliveryCharge || 60;
+                const discount = orderData.discount || 0;
+                const totalPayable = subtotal + deliveryCharge - discount;
 
-        const deliveryCharge = orderData.deliveryCharge || 60;
-        const discount = orderData.discount || 0;
-        const totalPayable = subtotal + deliveryCharge - discount;
+                const createdOrder = await tx.order.create({
+                    data: {
+                        ...orderData,
+                        alternativePhone: orderData.alternativePhone || null,
+                        orderNumber,
+                        trackingNumber,
+                        merchantDetailsId: merchantDetails.id,
+                        subtotal,
+                        deliveryCharge,
+                        discount,
+                        totalPayable,
+                        status: OrderStatus.PENDING,
+                        isPreBooking: !!orderData.preBookingDate || orderData.isPreBooking || false,
+                        preBookingDate: orderData.preBookingDate ? new Date(orderData.preBookingDate) : null,
+                    },
+                });
 
+                for (const item of items) {
+                    const variant = await tx.productVariant.findUnique({
+                        where: { id: item.variantId },
+                    });
 
-        const createdOrder = await tx.order.create({
-            data: {
-                ...orderData,
-                alternativePhone: orderData.alternativePhone || null,
-                orderNumber,
-                trackingNumber,
-                merchantDetailsId: merchantDetails.id,
-                subtotal,
-                deliveryCharge,
-                discount,
-                totalPayable,
-                status: OrderStatus.PENDING,
-                isPreBooking: !!orderData.preBookingDate || orderData.isPreBooking || false,
-                preBookingDate: orderData.preBookingDate ? new Date(orderData.preBookingDate) : null,
-            },
-        });
+                    if (!variant) throw new Error(`Variant with ID ${item.variantId} not found`);
 
+                    if (item.quantity > variant.quantity) {
+                        throw new Error(`Insufficient stock for variant ${variant.variantName}. Available: ${variant.quantity}, Requested: ${item.quantity}`);
+                    }
 
-        for (const item of items) {
-            const variant = await tx.productVariant.findUnique({
-                where: { id: item.variantId },
+                    await tx.orderItem.create({
+                        data: {
+                            orderId: createdOrder.id,
+                            variantId: item.variantId,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            totalPrice: item.quantity * item.unitPrice,
+                        },
+                    });
+                }
+
+                return createdOrder;
+            }, {
+                isolationLevel: 'Serializable',
             });
 
-            if (!variant) {
-                throw new Error(`Variant with ID ${item.variantId} not found`);
+            return result;
+        } catch (error: any) {
+            // Prisma error code for unique constraint violation
+            if (error.code === 'P2002') {
+                attempt++;
+                const delay = Math.floor(Math.random() * 200) + 50; // 50-250ms random delay
+                console.warn(`[Attempt ${attempt}] Unique constraint violation (likely orderNumber). Retrying in ${delay}ms... Details:`, error.meta);
+                
+                if (attempt >= MAX_RETRIES) {
+                    console.error("Critical: Failed to generate a unique order number after all attempts.");
+                    throw new Error("Failed to generate a unique order number after multiple attempts. Please try again.");
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error("Order creation transaction failed:", error);
+                throw error;
             }
-
-            if (item.quantity > variant.quantity) {
-                throw new Error(`Insufficient stock for variant ${variant.variantName}. Available: ${variant.quantity}, Requested: ${item.quantity}`);
-            }
-
-            const finalQuantity = item.quantity;
-
-            await tx.orderItem.create({
-                data: {
-                    orderId: createdOrder.id,
-                    variantId: item.variantId,
-                    quantity: finalQuantity,
-                    unitPrice: item.unitPrice,
-                    totalPrice: finalQuantity * item.unitPrice,
-                },
-            });
         }
-
-        return createdOrder;
-    });
-
-    return result;
+    }
 };
 
 const getMyOrders = async (userId: string, query: { page?: string; limit?: string; status?: string; searchTerm?: string } = {}) => {
@@ -340,6 +366,15 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
         throw new Error(`Invalid transition. Order "${existingOrder.orderNumber}" must be APPROVED by Merchant before it can be marked as PACKED. Current status: ${existingOrder.status}`);
     }
 
+    // CHECK: Balance + Credit Limit before confirming or packing/dispatching
+    const needsFulfillmentCheck = 
+        (payload.status === OrderStatus.APPROVED && existingOrder.status !== OrderStatus.APPROVED) || 
+        (payload.status === OrderStatus.PACKED && existingOrder.status !== OrderStatus.PACKED);
+
+    if (needsFulfillmentCheck) {
+        await BillingService.checkMerchantFulfillmentAbility(existingOrder.merchantDetailsId);
+    }
+
     if (payload.status === OrderStatus.APPROVED) {
         for (const item of existingOrder.items) {
             const variant = await prisma.productVariant.findUnique({
@@ -468,6 +503,12 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
                     }
                 });
             }
+        }
+
+        // Trigger Billing: Packing Charge when status becomes PACKED
+        if (payload.status === OrderStatus.PACKED && existingOrder.status !== OrderStatus.PACKED) {
+            console.log(`[BILLING] Processing packing charge for order ${existingOrder.orderNumber}`);
+            await BillingService.chargePackingFee(orderId, tx);
         }
 
         return updatedOrder;
@@ -724,6 +765,7 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
     };
 
     let validOrders = orders;
+    console.log(`[DEBUG] Bulk update ${orderIds.length} orders to ${status}. Pre-filtering...`);
 
     if (status === OrderStatus.SHIPPED) {
         validOrders = orders.filter(o => o.status === OrderStatus.PACKED);
@@ -825,9 +867,11 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
     // Handle other orders individually
     for (const order of otherOrders) {
         try {
+            console.log(`[DEBUG] Bulk processing order ${order.orderNumber} to ${status}`);
             await updateOrderStatus(order.id, { status, adminNote }, false);
             results.success++;
         } catch (error: any) {
+            console.error(`[DEBUG] Bulk process failed for ${order.orderNumber}: ${error.message}`);
             results.failed++;
             results.errors.push(`Order ${order.orderNumber}: ${error.message}`);
         }

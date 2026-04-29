@@ -28,6 +28,36 @@ enum PaymentStatus {
   REJECTED
 }
 
+enum WithdrawStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum TransactionCategory {
+  FUND_ADD
+  PACKING_CHARGE
+  STORAGE_CHARGE
+  RETURN_CHARGE
+  PAYOUT
+  ADJUSTMENT
+  CREDIT_LIMIT
+  COURIER_CHARGE
+  TAX_VAT
+}
+
+enum BillingCycle {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum BusinessType {
   E_COMMERCE
   RETAILER

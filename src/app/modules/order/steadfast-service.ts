@@ -8,8 +8,8 @@ interface Order {
     customerPhone: string;
     customerEmail?: string | null;
     deliveryAddress: string;
-    district: string;
-    area: string;
+    district?: string | null;
+    area?: string | null;
     totalPayable: number;
     merchantNote?: string | null;
     paymentMethod?: string | null;
@@ -56,7 +56,7 @@ const createOrder = async (order: Order, merchantCredentials?: { apiKey?: string
         invoice: order.orderNumber,
         recipient_name: order.customerName.slice(0, 100),
         recipient_phone: order.customerPhone.replace(/[^0-9]/g, "").slice(-11),
-        recipient_address: `${order.deliveryAddress}, ${order.area}, ${order.district}`.slice(0, 250),
+        recipient_address: [order.deliveryAddress, order.area, order.district].filter(Boolean).join(", ").slice(0, 250),
         recipient_email: order.customerEmail || "",
         cod_amount: (() => {
             const method = (order.paymentMethod || "COD").toUpperCase();
@@ -171,7 +171,7 @@ const bulkCreate = async (orders: Order[], merchantCredentials?: { apiKey?: stri
         invoice: order.orderNumber,
         recipient_name: order.customerName.slice(0, 100),
         recipient_phone: order.customerPhone.replace(/[^0-9]/g, "").slice(-11),
-        recipient_address: `${order.deliveryAddress}, ${order.area}, ${order.district}`.slice(0, 250),
+        recipient_address: [order.deliveryAddress, order.area, order.district].filter(Boolean).join(", ").slice(0, 250),
         recipient_email: order.customerEmail || "",
         cod_amount: (() => {
             const method = (order.paymentMethod || "COD").toUpperCase();

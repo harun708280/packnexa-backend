@@ -8,8 +8,8 @@ model Order {
   customerPhone     String
   customerEmail     String?
   deliveryAddress   String
-  district          String
-  area              String
+  district          String?
+  area              String?
   paymentMethod     String          @default("COD")
   preferredCourier  String?
   subtotal          Float           @default(0)

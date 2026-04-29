@@ -58,6 +58,8 @@ model ProductVariant {
   stockAdjustments      StockAdjustment[]
   location              VariantLocation?
   pricing               VariantPricing?
+  unitValue             Float? 
+  unitRate              Float? 
   orderItems            OrderItem[]
   returnItems           ReturnItem[]
   product               Product                @relation(fields: [productId], references: [id], onDelete: Cascade)

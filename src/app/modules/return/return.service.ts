@@ -2,6 +2,7 @@ import httpStatus from "http-status";
 import AppError from "../../errorHelper/AppError";
 import { prisma } from "../../shared/prisma";
 import { IOptions, paginationHelper } from "../../helper/paginationHelper";
+import { BillingService } from "../billing/billing.service";
 
 const createReturn = async (identifier: string, payload: any, isMerchantDetailsId = false, isInternal = false) => {
     let actualMerchantDetailsId: string;
@@ -64,6 +65,9 @@ const createReturn = async (identifier: string, payload: any, isMerchantDetailsI
             data: { status: "RETURNED" },
         });
 
+        console.log(`[BILLING] Processing return charge for return ${returnOrder.id}`);
+        await BillingService.chargeReturnFee(returnOrder.id, tx);
+
         return returnOrder;
     });
 };
@@ -121,6 +125,11 @@ const updateReturnStatus = async (returnId: string, payload: any) => {
                     },
                 });
             }
+        }
+
+        if (status === "APPROVED") {
+            console.log(`[BILLING] Processing return charge for approved return ${returnId}`);
+            await BillingService.chargeReturnFee(returnId, tx);
         }
 
         return updatedReturn;

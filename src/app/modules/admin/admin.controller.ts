@@ -149,7 +149,8 @@ const approvePhaseFour = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getApprovedMerchant = catchAsync(async (req: Request, res: Response) => {
-  const result = await AdminService.getApprovedMerchant();
+  const searchTerm = req.query.searchTerm as string;
+  const result = await AdminService.getApprovedMerchant(searchTerm);
 
   sendResponse(res, {
     statusCode: 200,

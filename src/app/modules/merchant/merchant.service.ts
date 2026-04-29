@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/prisma";
 import { SteadfastService } from "../order/steadfast-service";
+import { BillingService } from "../billing/billing.service";
 
 const personalDetails = async (payload: any) => {
   const {
@@ -320,7 +321,7 @@ const getOnboardingConfig = async () => {
             name: "facebookPageLink",
             label: "Facebook Page Link",
             type: "url",
-            required: false,
+            required: true,
           },
           {
             name: "websiteLink",
@@ -335,20 +336,8 @@ const getOnboardingConfig = async () => {
             required: false,
           },
           {
-            name: "storageSpace",
-            label: "Storage Space",
-            type: "text",
-            required: false,
-          },
-          {
             name: "courierPartner",
             label: "Courier Partner",
-            type: "text",
-            required: false,
-          },
-          {
-            name: "paymentMethods",
-            label: "Payment Methods",
             type: "text",
             required: false,
           },
@@ -513,7 +502,9 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     fulfillmentRaw,
     ordersForCustomers,
     orderItemsRaw,
-    stockAlertsRaw
+    stockAlertsRaw,
+    packingChargesRaw,
+    returnChargesRaw
   ] = await Promise.all([
     prisma.order.count({ where: whereCondition }),
     prisma.order.aggregate({
@@ -552,14 +543,40 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
       include: { product: true, stockControl: true },
       orderBy: { quantity: "asc" },
       take: 10
+    }),
+    prisma.transaction.aggregate({
+      where: { ...whereCondition, category: "PACKING_CHARGE" },
+      _sum: { amount: true }
+    }),
+    prisma.transaction.aggregate({
+      where: { ...whereCondition, category: "RETURN_CHARGE" },
+      _sum: { amount: true }
     })
   ]);
 
-  // Calculations
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  const currentMonthStorageData = await (prisma as any).invoice.aggregate({
+    where: {
+      merchantDetailsId: merchantId,
+      category: "STORAGE_CHARGE",
+      status: "APPROVED",
+      createdAt: { gte: startOfMonth, lte: endOfMonth }
+    },
+    _sum: { totalAmount: true },
+    _count: true
+  });
+
+  const currentMonthStorageCharge = currentMonthStorageData._sum.totalAmount || 0;
+
+  const totalPackingFees = packingChargesRaw._sum.amount || 0;
+  const totalReturnCharges = returnChargesRaw._sum.amount || 0;
+
   const stockValue = variants.reduce((acc, curr) => acc + (curr.quantity * (curr.pricing?.salePrice || 0)), 0);
   const totalSales = totalSalesData._sum.totalPayable || 0;
 
-  // Last 7 Days Trend
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -585,30 +602,27 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     })
   );
 
-  // Top Customers Processing
   const customerMap = new Map();
   ordersForCustomers.forEach(o => {
     const id = o.customerPhone || o.customerEmail;
-    if(!customerMap.has(id)) customerMap.set(id, { name: o.customerName, email: o.customerEmail, phoneNumber: o.customerPhone, orderCount: 0, totalSpent: 0 });
+    if (!customerMap.has(id)) customerMap.set(id, { name: o.customerName, email: o.customerEmail, phoneNumber: o.customerPhone, orderCount: 0, totalSpent: 0 });
     const c = customerMap.get(id);
     c.orderCount++;
     c.totalSpent += o.totalPayable;
   });
-  const topCustomers = Array.from(customerMap.values()).sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 10);
+  const topCustomers = Array.from(customerMap.values()).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 10);
 
-  // Top Products Processing
   const productMap = new Map();
   orderItemsRaw.forEach(item => {
     const pId = item.variant?.productId;
-    if(!pId) return;
-    if(!productMap.has(pId)) productMap.set(pId, { id: pId, name: item.variant?.product?.productName || "Unknown", quantitySold: 0, revenue: 0 });
+    if (!pId) return;
+    if (!productMap.has(pId)) productMap.set(pId, { id: pId, name: item.variant?.product?.productName || "Unknown", quantitySold: 0, revenue: 0 });
     const p = productMap.get(pId);
     p.quantitySold += item.quantity;
     p.revenue += item.totalPrice;
   });
-  const topProducts = Array.from(productMap.values()).sort((a,b) => b.quantitySold - a.quantitySold).slice(0, 10);
+  const topProducts = Array.from(productMap.values()).sort((a, b) => b.quantitySold - a.quantitySold).slice(0, 10);
 
-  // Stock Alerts Processing
   const stockAlerts = stockAlertsRaw
     .filter(v => v.quantity <= (v.stockControl?.reorderPoint ?? 10))
     .map(v => ({
@@ -628,11 +642,23 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     })
     : 0;
 
+  const globalStorageRule = await prisma.globalBillingRule.findFirst({
+    where: { category: "STORAGE_CHARGE", isActive: true }
+  });
+  const globalCreditLimit = await BillingService.getGlobalCreditLimit();
+
   return {
     totalOrders,
     totalProducts,
     stockValue,
     totalSales,
+    walletBalance: merchantDetails.walletBalance || 0,
+    creditLimit: merchantDetails.creditLimit > 0 ? merchantDetails.creditLimit : globalCreditLimit,
+    merchantCreditLimit: merchantDetails.creditLimit || 0,
+    storageRackCount: merchantDetails.storageRackCount || 0,
+    storageRackRate: merchantDetails.storageRackRate || 0,
+    globalCreditLimit,
+    globalStorageRule,
     steadfastBalance: steadfastBalance || 0,
     salesTrend,
     topCustomers,
@@ -640,11 +666,17 @@ const getDashboardStats = async (userId: string, query: { startDate?: string; en
     stockAlerts,
     approvalStatus: merchantDetails.isVerified ? "Verified" : "Pending",
     totalOrdersAmount: totalOrdersStats._sum.totalPayable || 0,
+    packingVatPercentage: merchantDetails.packingVatPercentage || 0,
+    storageVatPercentage: merchantDetails.storageVatPercentage || 0,
+    returnVatPercentage: merchantDetails.returnVatPercentage || 0,
     fulfillment: fulfillmentRaw.map((f: any) => ({
       status: f.status,
       count: f._count.id,
       amount: f._sum?.totalPayable || 0
-    }))
+    })),
+    totalPackingFees,
+    totalReturnCharges,
+    currentMonthStorageCharge
   };
 };
 

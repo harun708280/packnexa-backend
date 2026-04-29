@@ -205,6 +205,21 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
     where.status = status;
   }
 
+  const approvedVariants = await prisma.productVariant.findMany({
+    where: {
+      quantity: { gte: 1 },
+      product: { status: ProductStatus.APPROVED },
+    },
+    select: {
+      quantity: true,
+      pricing: { select: { salePrice: true } },
+    },
+  });
+
+  const marketplaceTotalValue = approvedVariants.reduce((sum, v) => {
+    return sum + (v.quantity * (v.pricing?.salePrice ?? 0));
+  }, 0);
+
   const [data, total, pendingCount, approvedCount, rejectedCount] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -254,7 +269,9 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
               select: {
                 salePrice: true
               }
-            }
+            },
+            unitValue: true,
+            unitRate: true
           }
         }
       },
@@ -276,6 +293,7 @@ const getAllProducts = async (query: { page?: string, limit?: string, searchTerm
       pendingCount,
       approvedCount,
       rejectedCount,
+      marketplaceTotalValue,
     },
     data,
   };
@@ -519,13 +537,27 @@ const deleteProduct = async (userId: string, productId: string) => {
   });
 };
 
-const approveProduct = async (id: string) => {
-  return prisma.product.update({
-    where: { id },
-    data: {
-      status: ProductStatus.APPROVED,
-      rejectionReason: null as any
-    } as any,
+const approveProduct = async (id: string, variants?: Array<{ id: string, unitValue: number, unitRate: number }>) => {
+  return prisma.$transaction(async (tx) => {
+    if (variants && variants.length > 0) {
+      for (const v of variants) {
+        await tx.productVariant.update({
+          where: { id: v.id },
+          data: {
+            unitValue: Number(v.unitValue),
+            unitRate: v.unitRate !== undefined ? Number(v.unitRate) : null
+          }
+        });
+      }
+    }
+
+    return tx.product.update({
+      where: { id },
+      data: {
+        status: ProductStatus.APPROVED,
+        rejectionReason: null as any
+      } as any,
+    });
   });
 };
 

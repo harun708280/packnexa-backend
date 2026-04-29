@@ -81,7 +81,8 @@ const deleteProduct = catchAsync(async (req: Request, res: Response) => {
 
 const approveProduct = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const result = await ProductService.approveProduct(id);
+  const { variants } = req.body;
+  const result = await ProductService.approveProduct(id, variants);
 
   sendResponse(res, {
     statusCode: 200,

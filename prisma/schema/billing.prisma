@@ -1,0 +1,130 @@
+model Transaction {
+  id                String              @id @default(uuid())
+  merchantDetailsId String
+  amount            Float
+  type              TransactionType
+  category          TransactionCategory
+  referenceId       String?             // e.g., Order ID, Withdraw ID
+  description       String?
+  balanceAfter      Float?
+  transactionId     String?             @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
+
+  @@index([merchantDetailsId])
+  @@index([category])
+  @@map("transactions")
+}
+
+model WithdrawRequest {
+  id                String              @id @default(uuid())
+  merchantDetailsId String
+  amount            Float
+  status            WithdrawStatus      @default(PENDING)
+  paymentMethod     String?
+  accountDetails    String?
+  transactionId     String?             @unique
+  adminNote         String?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
+
+  @@index([merchantDetailsId])
+  @@map("withdraw_requests")
+}
+
+model GlobalBillingRule {
+  id                String              @id @default(uuid())
+  category          TransactionCategory
+  quantityThreshold Int
+  unitValue         Float
+  description       String?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@map("global_billing_rules")
+}
+
+model Invoice {
+  id                String              @id @default(uuid())
+  merchantDetailsId String
+  invoiceNumber     String              @unique
+  startDate         DateTime
+  endDate           DateTime
+  totalAmount       Float
+  packingTotal      Float               @default(0)
+  packingVat        Float               @default(0)
+  storageTotal      Float               @default(0)
+  storageVat        Float               @default(0)
+  returnTotal       Float               @default(0)
+  returnVat         Float               @default(0)
+  courierTotal      Float               @default(0)
+  totalSales        Float               @default(0)
+  totalVat          Float               @default(0)
+  status            PaymentStatus       @default(PENDING)
+  pdfUrl            String?
+  referenceId       String?             // Added: Linked Order ID, Return Order ID, or Batch ID
+  category          TransactionCategory? // Added: To distinguish between Packing, Return, Storage, etc.
+  metadata          Json?                // Added: For storing breakdown details (e.g., storage segments)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
+
+  @@index([merchantDetailsId])
+  @@map("invoices")
+}
+
+model DepositRequest {
+  id                String              @id @default(uuid())
+  merchantDetailsId String
+  amount            Float
+  paymentMethod     String?             // e.g., bKash, Nagad, Bank
+  transactionId     String?             @unique
+  senderAccount     String?             // Sender number or bank account
+  receptionDetails String?          // Store snapshot of admin payment details used
+  merchantNote      String?          // Information provided by the merchant (e.g. branch, reason)
+  status            PaymentStatus       @default(PENDING)
+  adminNote         String?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
+
+  @@index([merchantDetailsId])
+  @@map("deposit_requests")
+}
+
+model AdminPaymentMethod {
+  id             String   @id @default(uuid())
+  methodName     String   @unique // e.g., bKash, Nagad, Bank, Rocket
+  accountNumber  String
+  bankName       String?  // Only for Bank
+  branchName     String?  // Only for Bank
+  accountHolder  String?  // Name or Bank Account Holder
+  instructions   String?  // Special instructions
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("admin_payment_methods")
+}
+
+model StorageBillingLog {
+  id                String              @id @default(uuid())
+  merchantDetailsId String
+  rackCount         Int
+  rackRate          Float
+  createdAt         DateTime            @default(now())
+
+  merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
+
+  @@index([merchantDetailsId])
+  @@map("storage_billing_logs")
+}

@@ -326,15 +326,42 @@ const approvePhaseFour = async (id: string) => {
   return updated;
 };
 
-const getApprovedMerchant = async () => {
+const getApprovedMerchant = async (searchTerm?: string) => {
+  const whereCondition: any = {
+    isSubmitted: true,
+    isVerified: true,
+  };
+
+  if (searchTerm) {
+    whereCondition.OR = [
+      { id: { contains: searchTerm, mode: "insensitive" } },
+      {
+        businessDetails: {
+          businessName: {
+            contains: searchTerm,
+            mode: "insensitive",
+          },
+        },
+      },
+      {
+        user: {
+          OR: [
+            { email: { contains: searchTerm, mode: "insensitive" } },
+            { firstName: { contains: searchTerm, mode: "insensitive" } },
+            { lastName: { contains: searchTerm, mode: "insensitive" } },
+          ],
+        },
+      },
+    ];
+  }
+
   const merchantDetails = await prisma.merchantDetails.findMany({
-    where: {
-      isSubmitted: true,
-      isVerified: true,
-    },
+    where: whereCondition,
     select: {
       id: true,
       updatedAt: true,
+      storageRackCount: true,
+      storageRackRate: true,
       user: {
         select: {
           email: true,
@@ -347,6 +374,7 @@ const getApprovedMerchant = async () => {
         select: {
           businessName: true,
           businessType: true,
+          businessLogo: true,
         },
       },
       personalDetails: {

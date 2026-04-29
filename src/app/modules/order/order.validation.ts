@@ -16,8 +16,8 @@ const createOrderSchema = z.object({
         z.string().email("Invalid email address").optional().nullable()
     ),
     deliveryAddress: z.string().min(1, "Delivery address is required"),
-    district: z.string().min(1, "District is required"),
-    area: z.string().min(1, "Area is required"),
+    district: z.string().optional().nullable().transform(val => val === "" ? null : val),
+    area: z.string().optional().nullable().transform(val => val === "" ? null : val),
     zipCode: z.string().optional().nullable(),
     orderSource: z.enum(["FACEBOOK", "WHATSAPP", "TIKTOK", "INSTAGRAM", "MANUAL", "WORDPRESS"]).optional(),
     paymentMethod: z.string().optional(),

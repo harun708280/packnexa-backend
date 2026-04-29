@@ -20,6 +20,24 @@ model MerchantDetails {
   steadfastSecretKey String?
   fraudCheckApiKey  String?
   fraudCheckBaseUrl String?
+
+  // Billing Fields
+  walletBalance     Float              @default(0)
+  creditLimit       Float              @default(0)
+  billingCycle      BillingCycle       @default(MONTHLY)
+  lastBillingDate   DateTime?
+  storageRackCount  Int                @default(0)
+  storageRackRate   Float              @default(0)
+  unitRate          Float              @default(0) 
+  packingVatPercentage Float           @default(0)
+  returnVatPercentage  Float           @default(0)
+  storageVatPercentage Float           @default(0)
+
+  transactions      Transaction[]
+  withdrawRequests  WithdrawRequest[]
+  depositRequests   DepositRequest[]
+  invoices          Invoice[]
+  storageBillingLogs StorageBillingLog[]
 }
 
 model PersonalDetails {

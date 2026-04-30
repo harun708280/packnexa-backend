@@ -74,7 +74,7 @@ const createOrder = async (userId: string, payload: any) => {
                     subtotal += item.quantity * item.unitPrice;
                 }
 
-                const deliveryCharge = orderData.deliveryCharge || 60;
+                const deliveryCharge = orderData.deliveryCharge ?? 0;
                 const discount = orderData.discount || 0;
                 const totalPayable = subtotal + deliveryCharge - discount;
 

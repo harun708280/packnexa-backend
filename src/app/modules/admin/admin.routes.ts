@@ -62,5 +62,6 @@ router.patch(
 
 router.get("/approved-merchants", AdminController.getApprovedMerchant);
 router.get("/merchant-profile/:id", AdminController.getMerchantProfile);
+router.get("/system-users", AdminController.getSystemUsers);
 
 export const adminRoutes = router;

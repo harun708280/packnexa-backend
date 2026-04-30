@@ -225,6 +225,25 @@ const getAllReturns = async (options: any) => {
                         ],
                     },
                 },
+                {
+                    merchantDetails: {
+                        OR: [
+                            {
+                                user: {
+                                    OR: [
+                                        { firstName: { contains: searchTerm, mode: "insensitive" } },
+                                        { lastName: { contains: searchTerm, mode: "insensitive" } },
+                                    ]
+                                }
+                            },
+                            {
+                                businessDetails: {
+                                    businessName: { contains: searchTerm, mode: "insensitive" }
+                                }
+                            }
+                        ]
+                    }
+                }
             ];
         }
 

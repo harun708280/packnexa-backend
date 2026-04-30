@@ -1,5 +1,6 @@
 import { PaymentStatus, UserRole } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
+import { paginationHelper } from "../../helper/paginationHelper";
 
 const getAppliedMerchant = async () => {
   const merchantDetails = await prisma.merchantDetails.findMany({
@@ -412,6 +413,46 @@ const getMerchantProfile = async (id: string) => {
   return merchant;
 };
 
+const getSystemUsers = async (options: any) => {
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+  const { searchTerm } = options;
+
+  const whereCondition: any = {
+    role: UserRole.USER,
+  };
+
+  if (searchTerm) {
+    whereCondition.OR = [
+      { id: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { contactNumber: { contains: searchTerm, mode: "insensitive" } },
+      { firstName: { contains: searchTerm, mode: "insensitive" } },
+      { lastName: { contains: searchTerm, mode: "insensitive" } },
+    ];
+  }
+
+  const result = await prisma.user.findMany({
+    where: whereCondition,
+    include: {
+      merchantDetails: true,
+    },
+    orderBy: { [sortBy]: sortOrder },
+    skip,
+    take: limit,
+  });
+
+  const total = await prisma.user.count({ where: whereCondition });
+
+  return {
+    meta: {
+      total,
+      page,
+      limit,
+    },
+    data: result,
+  };
+};
+
 export const AdminService = {
   getAppliedMerchant,
   getAppliedMerchantPersonalDetails,
@@ -426,4 +467,5 @@ export const AdminService = {
   approvePhaseFour,
   getApprovedMerchant,
   getMerchantProfile,
+  getSystemUsers,
 };

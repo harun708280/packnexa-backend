@@ -4,15 +4,13 @@ model Transaction {
   amount            Float
   type              TransactionType
   category          TransactionCategory
-  referenceId       String?             // e.g., Order ID, Withdraw ID
+  referenceId       String?             
   description       String?
   balanceAfter      Float?
   transactionId     String?             @unique
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-
   merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
-
   @@index([merchantDetailsId])
   @@index([category])
   @@map("transactions")
@@ -46,7 +44,6 @@ model GlobalBillingRule {
   isActive          Boolean             @default(true)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-
   @@map("global_billing_rules")
 }
 
@@ -68,9 +65,9 @@ model Invoice {
   totalVat          Float               @default(0)
   status            PaymentStatus       @default(PENDING)
   pdfUrl            String?
-  referenceId       String?             // Added: Linked Order ID, Return Order ID, or Batch ID
-  category          TransactionCategory? // Added: To distinguish between Packing, Return, Storage, etc.
-  metadata          Json?                // Added: For storing breakdown details (e.g., storage segments)
+  referenceId       String?             
+  category          TransactionCategory? 
+  metadata          Json?                
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -84,11 +81,11 @@ model DepositRequest {
   id                String              @id @default(uuid())
   merchantDetailsId String
   amount            Float
-  paymentMethod     String?             // e.g., bKash, Nagad, Bank
+  paymentMethod     String?             
   transactionId     String?             @unique
-  senderAccount     String?             // Sender number or bank account
-  receptionDetails String?          // Store snapshot of admin payment details used
-  merchantNote      String?          // Information provided by the merchant (e.g. branch, reason)
+  senderAccount     String?             
+  receptionDetails String?          
+  merchantNote      String?          
   status            PaymentStatus       @default(PENDING)
   adminNote         String?
   processedAt       DateTime?
@@ -103,12 +100,12 @@ model DepositRequest {
 
 model AdminPaymentMethod {
   id             String   @id @default(uuid())
-  methodName     String   @unique // e.g., bKash, Nagad, Bank, Rocket
+  methodName     String   @unique 
   accountNumber  String
-  bankName       String?  // Only for Bank
-  branchName     String?  // Only for Bank
-  accountHolder  String?  // Name or Bank Account Holder
-  instructions   String?  // Special instructions
+  bankName       String?  
+  branchName     String?  
+  accountHolder  String?  
+  instructions   String?  
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -122,9 +119,7 @@ model StorageBillingLog {
   rackCount         Int
   rackRate          Float
   createdAt         DateTime            @default(now())
-
   merchantDetails   MerchantDetails     @relation(fields: [merchantDetailsId], references: [id])
-
   @@index([merchantDetailsId])
   @@map("storage_billing_logs")
 }

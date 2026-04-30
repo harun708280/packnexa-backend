@@ -172,6 +172,18 @@ const getMerchantProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getSystemUsers = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.getSystemUsers(req.query);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "System users list fetched successfully",
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
 export const AdminController = {
   getAppliedMerchant,
   getAppliedMerchantPersonalDetails,
@@ -186,4 +198,5 @@ export const AdminController = {
   approvePhaseFour,
   getApprovedMerchant,
   getMerchantProfile,
+  getSystemUsers,
 };

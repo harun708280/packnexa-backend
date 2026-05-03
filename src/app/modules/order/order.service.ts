@@ -22,7 +22,6 @@ const createOrder = async (userId: string, payload: any) => {
     while (attempt < MAX_RETRIES) {
         try {
             const result = await prisma.$transaction(async (tx) => {
-                // Local date handling for day boundaries and orderNumber
                 const localNow = new Date();
                 const year = localNow.getFullYear().toString().slice(-2);
                 const month = (localNow.getMonth() + 1).toString().padStart(2, '0');
@@ -124,12 +123,11 @@ const createOrder = async (userId: string, payload: any) => {
 
             return result;
         } catch (error: any) {
-            // Prisma error code for unique constraint violation
             if (error.code === 'P2002') {
                 attempt++;
                 const delay = Math.floor(Math.random() * 200) + 50; // 50-250ms random delay
                 console.warn(`[Attempt ${attempt}] Unique constraint violation (likely orderNumber). Retrying in ${delay}ms... Details:`, error.meta);
-                
+
                 if (attempt >= MAX_RETRIES) {
                     console.error("Critical: Failed to generate a unique order number after all attempts.");
                     throw new Error("Failed to generate a unique order number after multiple attempts. Please try again.");
@@ -367,8 +365,8 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
     }
 
     // CHECK: Balance + Credit Limit before confirming or packing/dispatching
-    const needsFulfillmentCheck = 
-        (payload.status === OrderStatus.APPROVED && existingOrder.status !== OrderStatus.APPROVED) || 
+    const needsFulfillmentCheck =
+        (payload.status === OrderStatus.APPROVED && existingOrder.status !== OrderStatus.APPROVED) ||
         (payload.status === OrderStatus.PACKED && existingOrder.status !== OrderStatus.PACKED);
 
     if (needsFulfillmentCheck) {

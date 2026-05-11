@@ -302,6 +302,11 @@ const getAllOrders = async (query: { page?: string; limit?: string; status?: str
                         weightKg: true,
                         sku: true,
                         variantImage: true,
+                        product: {
+                            select: {
+                                productName: true,
+                            },
+                        },
                     }
                 }
             }
@@ -361,7 +366,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
     }
 
     if (payload.status === OrderStatus.PACKED && existingOrder.status !== OrderStatus.APPROVED) {
-        throw new Error(`Invalid transition. Order "${existingOrder.orderNumber}" must be APPROVED by Merchant before it can be marked as PACKED. Current status: ${existingOrder.status}`);
+        throw new Error(`Invalid transition. Order "${existingOrder.orderNumber}" must be CONFIRMED by Merchant before it can be marked as PACKED. Current status: ${existingOrder.status === 'APPROVED' ? 'CONFIRMED' : existingOrder.status}`);
     }
 
     // CHECK: Balance + Credit Limit before confirming or packing/dispatching
@@ -446,6 +451,12 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
             }
         }
 
+
+        // Business Rule: Merchants cannot cancel orders once they are PACKED or further
+        const restrictedStatuses = ['PACKED', 'SHIPPED', 'DELIVERED', 'RETURNED', 'COMPLETED'];
+        if (payload.status === 'CANCELLED' && restrictedStatuses.includes(existingOrder.status)) {
+            throw new ApiError(httpStatus.FORBIDDEN, `Cannot cancel order ${existingOrder.orderNumber} because it is already ${existingOrder.status}`);
+        }
 
         if (wasDispatched && willBeInactive) {
             console.log(`[INVENTORY] Restocking for order ${existingOrder.orderNumber} as it moves to ${payload.status}`);
@@ -539,6 +550,7 @@ const updateOrderStatus = async (orderId: string, payload: { status: OrderStatus
                         data: {
                             trackingNumber: steadfastResponse.consignment.tracking_code,
                             consignmentId: steadfastResponse.consignment.consignment_id.toString(),
+                            trackingLink: steadfastResponse.consignment.tracking_link
                         },
                     });
                     console.log(`Order ${result.orderNumber} successfully sent to Steadfast. Tracking: ${steadfastResponse.consignment.tracking_code}, Consignment ID: ${steadfastResponse.consignment.consignment_id}`);
@@ -762,29 +774,42 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
         errors: [] as string[]
     };
 
-    let validOrders = orders;
-    console.log(`[DEBUG] Bulk update ${orderIds.length} orders to ${status}. Pre-filtering...`);
+    const validOrders: typeof orders = [];
+    orders.forEach(o => {
+        let isValid = false;
+        let reason = "";
 
-    if (status === OrderStatus.SHIPPED) {
-        validOrders = orders.filter(o => o.status === OrderStatus.PACKED);
-    } else if (status === OrderStatus.PACKED) {
+        const currentStatusDisplay = o.status === 'APPROVED' ? 'CONFIRMED' : o.status;
 
-        validOrders = orders.filter(o => o.status === OrderStatus.APPROVED);
-    } else if (status === (OrderStatus as any).HOLD) {
+        if (status === OrderStatus.SHIPPED) {
+            if (o.status === OrderStatus.PACKED) isValid = true;
+            else reason = `Order ${o.orderNumber} must be PACKED before Dispatch (Current: ${currentStatusDisplay})`;
+        } else if (status === OrderStatus.PACKED) {
+            if (o.status === OrderStatus.APPROVED) isValid = true;
+            else reason = `Order ${o.orderNumber} must be CONFIRMED before Packing (Current: ${currentStatusDisplay})`;
+        } else if (status === (OrderStatus as any).HOLD) {
+            if ([OrderStatus.PENDING, OrderStatus.APPROVED].includes(o.status)) isValid = true;
+            else reason = `Order ${o.orderNumber} cannot be put on HOLD (Current: ${currentStatusDisplay})`;
+        } else if (status === OrderStatus.APPROVED) {
+            if ([OrderStatus.PENDING, (OrderStatus as any).HOLD].includes(o.status)) isValid = true;
+            else reason = `Order ${o.orderNumber} cannot be CONFIRMED (Current: ${currentStatusDisplay})`;
+        } else if (status === OrderStatus.CANCELLED) {
+            if (!([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.RETURNED] as OrderStatus[]).includes(o.status)) isValid = true;
+            else reason = `Order ${o.orderNumber} cannot be CANCELLED (Current: ${currentStatusDisplay})`;
+        } else if (status === OrderStatus.RETURNED) {
+            if (([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.PACKED] as OrderStatus[]).includes(o.status)) isValid = true;
+            else reason = `Order ${o.orderNumber} cannot be marked as RETURNED (Current: ${currentStatusDisplay})`;
+        } else {
+            isValid = true;
+        }
 
-        validOrders = orders.filter(o => ([OrderStatus.PENDING, OrderStatus.APPROVED] as OrderStatus[]).includes(o.status));
-    } else if (status === OrderStatus.APPROVED) {
-
-        validOrders = orders.filter(o => ([OrderStatus.PENDING, (OrderStatus as any).HOLD] as OrderStatus[]).includes(o.status));
-    } else if (status === OrderStatus.CANCELLED) {
-
-        validOrders = orders.filter(o => !([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.RETURNED] as OrderStatus[]).includes(o.status));
-    } else if (status === OrderStatus.RETURNED) {
-
-        validOrders = orders.filter(o => ([OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.PACKED] as OrderStatus[]).includes(o.status));
-    }
-
-    results.skipped = orders.length - validOrders.length;
+        if (isValid) {
+            validOrders.push(o);
+        } else {
+            results.skipped++;
+            if (reason) results.errors.push(reason);
+        }
+    });
 
     // Separate orders by courier
     const steadfastOrders = validOrders.filter(o =>
@@ -820,10 +845,12 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
                         secretKey: merchantKeys.steadfastSecretKey
                     });
 
+                    console.log(`[DEBUG] Steadfast bulk response for merchant ${merchantId}:`, JSON.stringify(bulkResponse));
+
                     if (bulkResponse && Array.isArray(bulkResponse)) {
                         for (const order of mOrders) {
                             const res = bulkResponse.find(r => r.invoice === order.orderNumber);
-                            if (res && res.status === 'success') {
+                            if (res && (res.status === 'success' || res.status?.toString().toLowerCase() === 'success')) {
                                 try {
                                     // Update each order using the single status update logic to handle inventory and status
                                     await updateOrderStatus(order.id, { status, adminNote }, false);
@@ -833,7 +860,8 @@ const bulkUpdateOrderStatus = async (payload: { orderIds: string[]; status: Orde
                                         where: { id: order.id },
                                         data: {
                                             trackingNumber: res.tracking_code,
-                                            consignmentId: res.consignment_id.toString()
+                                            consignmentId: res.consignment_id.toString(),
+                                            trackingLink: res.tracking_link
                                         }
                                     });
                                     results.success++;
@@ -984,10 +1012,16 @@ const trackSteadfastOrder = async (orderId: string) => {
         const sStatus = steadfastResult.delivery_status.toLowerCase();
         let newStatus: OrderStatus | null = null;
 
-        if (sStatus.includes("delivered")) {
+        // Strict mapping to avoid partial_delivered or delivered_approval_pending being marked as final DELIVERED
+        if (sStatus === "delivered") {
             newStatus = OrderStatus.DELIVERED;
-        } else if (sStatus.includes("cancelled") || sStatus.includes("return")) {
+        } else if (sStatus.includes("cancelled") || sStatus.includes("return") || sStatus.includes("refused")) {
             newStatus = OrderStatus.RETURNED;
+        } else if (sStatus.includes("partial")) {
+            // For partial deliveries, we might want to keep it as SHIPPED or mark as RETURNED depending on business preference
+            // Usually, partial delivery means some items are returned. 
+            // For now, let's not auto-mark as DELIVERED if it's partial.
+            newStatus = OrderStatus.RETURNED; // Or keep existing
         }
 
         if (newStatus && newStatus !== order.status) {
@@ -1142,9 +1176,13 @@ const syncAllSteadfastOrders = async () => {
     console.log(`[JOB] Starting Steadfast status sync at ${new Date().toLocaleString()}`);
 
     try {
-        const shippedOrders = await prisma.order.findMany({
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+        const ordersToSync = await prisma.order.findMany({
             where: {
-                status: OrderStatus.SHIPPED,
+                status: { in: [OrderStatus.SHIPPED, OrderStatus.DELIVERED] },
+                updatedAt: { gte: threeDaysAgo },
                 OR: [
                     { preferredCourier: { contains: "steadfast", mode: "insensitive" } },
                     { preferredCourier: null },
@@ -1153,12 +1191,12 @@ const syncAllSteadfastOrders = async () => {
                 ],
                 trackingNumber: { not: null }
             },
-            select: { id: true, orderNumber: true }
+            select: { id: true, orderNumber: true, status: true }
         });
 
-        console.log(`[JOB] Found ${shippedOrders.length} shipped orders for sync.`);
+        console.log(`[JOB] Found ${ordersToSync.length} orders for sync (Shipped/Recently Delivered).`);
 
-        for (const order of shippedOrders) {
+        for (const order of ordersToSync) {
             try {
                 await trackSteadfastOrder(order.id);
                 await new Promise(resolve => setTimeout(resolve, 500));

@@ -25,6 +25,7 @@ model Order {
   zipCode           String?
   trackingNumber    String?         @unique
   consignmentId     String?         @unique
+  trackingLink      String?
   alternativePhone  String?
   items             OrderItem[]
   merchantDetails   MerchantDetails @relation(fields: [merchantDetailsId], references: [id])
